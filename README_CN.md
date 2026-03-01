@@ -43,25 +43,25 @@ Copilot     ─┘                              ├──  Factory CLI (Droid)
       <img src="https://assets.byokey.io/icons/providers/anthropic.svg" width="36" alt="Anthropic"><br>
       <b>Claude</b><br>
       <sup>PKCE</sup><br>
-      <sub>opus-4 · sonnet-4.5</sub>
+      <sub>opus-4-6 · sonnet-4-5 · haiku-4-5</sub>
     </td>
     <td align="center" width="120">
       <img src="https://assets.byokey.io/icons/providers/openai.svg" width="36" alt="OpenAI"><br>
       <b>Codex</b><br>
       <sup>PKCE</sup><br>
-      <sub>o4-mini · o3 · gpt-4o</sub>
+      <sub>o4-mini · o3</sub>
     </td>
     <td align="center" width="120">
       <img src="https://assets.byokey.io/icons/providers/githubcopilot.svg" width="36" alt="GitHub Copilot"><br>
       <b>Copilot</b><br>
       <sup>设备码</sup><br>
-      <sub>gpt-4o · claude-3.5 · o3-mini</sub>
+      <sub>gpt-5.x · claude-sonnet-4.x · gemini-3.x</sub>
     </td>
     <td align="center" width="120">
       <img src="https://assets.byokey.io/icons/providers/googlegemini.svg" width="36" alt="Google Gemini"><br>
       <b>Gemini</b><br>
       <sup>PKCE</sup><br>
-      <sub>2.0-flash · 1.5-pro</sub>
+      <sub>2.0-flash · 1.5-pro · 1.5-flash</sub>
     </td>
     <td align="center" width="120">
       <img src="https://assets.byokey.io/icons/providers/amazonwebservices.svg" width="36" alt="AWS"><br>
@@ -130,11 +130,20 @@ export OPENAI_API_KEY=any          # byokey 忽略 key 的值
 byokey <COMMAND>
 
 Commands:
-  serve    启动代理服务器
-  login    向 Provider 认证
-  logout   删除指定 Provider 的已存储凭据
-  status   显示所有 Provider 的认证状态
-  help     打印帮助信息
+  serve         启动代理服务器（前台）
+  start         在后台启动代理服务器
+  stop          停止后台代理服务器
+  restart       重启后台代理服务器
+  autostart     管理开机自启
+  login         向 Provider 认证
+  logout        删除指定 Provider 的已存储凭据
+  status        显示所有 Provider 的认证状态
+  accounts      列出某个 Provider 的所有账户
+  switch        切换某个 Provider 的活动账户
+  amp           Amp 相关工具
+  openapi       导出 OpenAPI 规范（JSON 格式）
+  completions   生成 Shell 补全脚本
+  help          打印帮助信息
 ```
 
 <details>
@@ -145,11 +154,13 @@ Commands:
 
 ```
 Options:
-  -c, --config <FILE>   YAML 配置文件 [默认: 无]
+  -c, --config <FILE>   配置文件（JSON 或 YAML）[默认: ~/.config/byokey/settings.json]
   -p, --port <PORT>     监听端口     [默认: 8018]
       --host <HOST>     监听地址     [默认: 127.0.0.1]
       --db <PATH>       SQLite 数据库路径 [默认: ~/.byokey/tokens.db]
 ```
+
+**`byokey start`** — 与 `serve` 选项相同，额外支持 `--log-file`（默认: `~/.byokey/server.log`）。
 
 **`byokey login <PROVIDER>`**
 
@@ -166,11 +177,19 @@ Options:
 
 **`byokey status`** — 打印所有已知 Provider 的认证状态。
 
+**`byokey accounts <PROVIDER>`** — 列出某个 Provider 的所有账户。
+
+**`byokey switch <PROVIDER>`** — 切换某个 Provider 的活动账户。
+
+**`byokey autostart <enable|disable|status>`** — 管理开机自启服务注册。
+
+**`byokey amp <inject|disable-ads>`** — Amp 工具：注入代理 URL 到 Amp 配置，或隐藏 Amp 广告。
+
 </details>
 
 ## 配置
 
-创建 YAML 文件（例如 `~/.byokey/config.yaml`），通过 `--config` 传入：
+创建配置文件（JSON 或 YAML，例如 `~/.config/byokey/settings.json`），通过 `--config` 传入：
 
 ```yaml
 port: 8018

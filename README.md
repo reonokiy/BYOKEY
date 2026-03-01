@@ -43,25 +43,25 @@ Copilot     ─┘                              ├──  Factory CLI (Droid)
       <img src="https://assets.byokey.io/icons/providers/anthropic.svg" width="36" alt="Anthropic"><br>
       <b>Claude</b><br>
       <sup>PKCE</sup><br>
-      <sub>opus-4 · sonnet-4.5</sub>
+      <sub>opus-4-6 · sonnet-4-5 · haiku-4-5</sub>
     </td>
     <td align="center" width="120">
       <img src="https://assets.byokey.io/icons/providers/openai.svg" width="36" alt="OpenAI"><br>
       <b>Codex</b><br>
       <sup>PKCE</sup><br>
-      <sub>o4-mini · o3 · gpt-4o</sub>
+      <sub>o4-mini · o3</sub>
     </td>
     <td align="center" width="120">
       <img src="https://assets.byokey.io/icons/providers/githubcopilot.svg" width="36" alt="GitHub Copilot"><br>
       <b>Copilot</b><br>
       <sup>Device code</sup><br>
-      <sub>gpt-4o · claude-3.5 · o3-mini</sub>
+      <sub>gpt-5.x · claude-sonnet-4.x · gemini-3.x</sub>
     </td>
     <td align="center" width="120">
       <img src="https://assets.byokey.io/icons/providers/googlegemini.svg" width="36" alt="Google Gemini"><br>
       <b>Gemini</b><br>
       <sup>PKCE</sup><br>
-      <sub>2.0-flash · 1.5-pro</sub>
+      <sub>2.0-flash · 1.5-pro · 1.5-flash</sub>
     </td>
     <td align="center" width="120">
       <img src="https://assets.byokey.io/icons/providers/amazonwebservices.svg" width="36" alt="AWS"><br>
@@ -130,11 +130,20 @@ export OPENAI_API_KEY=any          # byokey ignores the key value
 byokey <COMMAND>
 
 Commands:
-  serve    Start the proxy server
-  login    Authenticate with a provider
-  logout   Remove stored credentials for a provider
-  status   Show authentication status for all providers
-  help     Print help
+  serve         Start the proxy server (foreground)
+  start         Start the proxy server in the background
+  stop          Stop the background proxy server
+  restart       Restart the background proxy server
+  autostart     Manage auto-start on system boot
+  login         Authenticate with a provider
+  logout        Remove stored credentials for a provider
+  status        Show authentication status for all providers
+  accounts      List all accounts for a provider
+  switch        Switch the active account for a provider
+  amp           Amp-related utilities
+  openapi       Export the OpenAPI specification as JSON
+  completions   Generate shell completions
+  help          Print help
 ```
 
 <details>
@@ -145,11 +154,13 @@ Commands:
 
 ```
 Options:
-  -c, --config <FILE>   YAML config file [default: none]
+  -c, --config <FILE>   Config file (JSON or YAML) [default: ~/.config/byokey/settings.json]
   -p, --port <PORT>     Listen port     [default: 8018]
       --host <HOST>     Listen address  [default: 127.0.0.1]
       --db <PATH>       SQLite DB path  [default: ~/.byokey/tokens.db]
 ```
+
+**`byokey start`** — Same options as `serve`, plus `--log-file` (default: `~/.byokey/server.log`).
 
 **`byokey login <PROVIDER>`**
 
@@ -166,11 +177,19 @@ Options:
 
 **`byokey status`** — Prints authentication status for every known provider.
 
+**`byokey accounts <PROVIDER>`** — Lists all accounts for a provider.
+
+**`byokey switch <PROVIDER>`** — Switches the active account for a provider.
+
+**`byokey autostart <enable|disable|status>`** — Manages boot-time service registration.
+
+**`byokey amp <inject|disable-ads>`** — Amp utilities: inject proxy URL into Amp config, or patch Amp to hide ads.
+
 </details>
 
 ## Configuration
 
-Create a YAML file (e.g. `~/.byokey/config.yaml`) and pass it with `--config`:
+Create a config file (JSON or YAML, e.g. `~/.config/byokey/settings.json`) and pass it with `--config`:
 
 ```yaml
 port: 8018
