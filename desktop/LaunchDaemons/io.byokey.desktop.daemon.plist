@@ -11,6 +11,7 @@
 
     <key>ProgramArguments</key>
     <array>
+        <string>io.byokey.desktop.daemon</string>
         <string>serve</string>
     </array>
 
