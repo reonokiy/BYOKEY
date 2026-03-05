@@ -32,10 +32,10 @@ pub fn cmd_amp_inject(url: Option<String>) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_amp_disable_ads(paths: Vec<PathBuf>, restore: bool) -> Result<()> {
+pub fn cmd_ads_disable(paths: Vec<PathBuf>, extension: bool) -> Result<()> {
     let bundles = if paths.is_empty() {
         println!("searching for amp bundle...");
-        let found = bundle::find_amp_bundles();
+        let found = bundle::find_amp_bundles(extension);
         if found.is_empty() {
             println!("no amp bundle found — falling back to hide_free_tier");
             set_hide_free_tier(true)?;
@@ -48,15 +48,6 @@ pub fn cmd_amp_disable_ads(paths: Vec<PathBuf>, restore: bool) -> Result<()> {
     } else {
         paths
     };
-
-    if restore {
-        for bundle_path in &bundles {
-            println!("\nrestoring: {}", bundle_path.display());
-            patch::amp_restore(bundle_path)?;
-        }
-        println!("\nrestart amp / reload editor window to apply.");
-        return Ok(());
-    }
 
     let mut any_patched = false;
     let mut all_failed = true;
@@ -101,6 +92,28 @@ pub fn cmd_amp_disable_ads(paths: Vec<PathBuf>, restore: bool) -> Result<()> {
         println!("\nrestart amp / reload editor window to apply.");
     }
 
+    Ok(())
+}
+
+pub fn cmd_ads_enable(paths: Vec<PathBuf>) -> Result<()> {
+    let bundles = if paths.is_empty() {
+        println!("searching for patched amp bundles...");
+        // Search everywhere (CLI + extensions) to restore all patched files.
+        bundle::find_amp_bundles(true)
+    } else {
+        paths
+    };
+
+    if bundles.is_empty() {
+        println!("no patched amp bundle found.");
+        return Ok(());
+    }
+
+    for bundle_path in &bundles {
+        println!("\nrestoring: {}", bundle_path.display());
+        patch::amp_restore(bundle_path)?;
+    }
+    println!("\nrestart amp / reload editor window to apply.");
     Ok(())
 }
 

@@ -143,14 +143,29 @@ enum AmpAction {
         #[arg(long)]
         url: Option<String>,
     },
+    /// Manage Amp ads patching.
+    Ads {
+        #[command(subcommand)]
+        action: AdsAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AdsAction {
     /// Patch Amp to hide ads (preserves impression telemetry).
-    DisableAds {
+    Disable {
         /// Explicit path(s) to the bundle file. Auto-detected if omitted.
         #[arg(value_name = "PATH")]
         paths: Vec<PathBuf>,
-        /// Restore the original bundle from backup.
+        /// Also patch editor extensions (VS Code, Cursor, Windsurf).
         #[arg(long)]
-        restore: bool,
+        extension: bool,
+    },
+    /// Restore original Amp files (re-enable ads).
+    Enable {
+        /// Explicit path(s) to the bundle file. Auto-detected if omitted.
+        #[arg(value_name = "PATH")]
+        paths: Vec<PathBuf>,
     },
 }
 
@@ -200,7 +215,10 @@ async fn main() -> Result<()> {
         } => auth::cmd_switch(provider, account, store.db).await,
         Commands::Amp { action } => match action {
             AmpAction::Inject { url } => amp::cmd_amp_inject(url),
-            AmpAction::DisableAds { paths, restore } => amp::cmd_amp_disable_ads(paths, restore),
+            AmpAction::Ads { action } => match action {
+                AdsAction::Disable { paths, extension } => amp::cmd_ads_disable(paths, extension),
+                AdsAction::Enable { paths } => amp::cmd_ads_enable(paths),
+            },
         },
         Commands::Openapi => {
             use utoipa::OpenApi as _;
