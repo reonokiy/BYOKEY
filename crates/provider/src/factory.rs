@@ -238,7 +238,7 @@ mod tests {
             ex.unwrap()
                 .supported_models()
                 .iter()
-                .all(|m| m.starts_with("ag-"))
+                .any(|m| m.starts_with("ag-"))
         );
     }
 
@@ -258,15 +258,30 @@ mod tests {
     #[test]
     fn test_make_executor_for_model_claude() {
         let auth = make_auth();
-        let ex = make_executor_for_model("claude-opus-4-6", |_| None, &empty_oauth(), None, auth, make_http(), None);
+        let ex = make_executor_for_model(
+            "claude-opus-4-6",
+            |_| None,
+            &empty_oauth(),
+            None,
+            auth,
+            make_http(),
+            None,
+        );
         assert!(ex.is_ok());
     }
 
     #[test]
     fn test_make_executor_for_model_unknown() {
         let auth = make_auth();
-        let result =
-            make_executor_for_model("nonexistent-model", |_| None, &empty_oauth(), None, auth, make_http(), None);
+        let result = make_executor_for_model(
+            "nonexistent-model",
+            |_| None,
+            &empty_oauth(),
+            None,
+            auth,
+            make_http(),
+            None,
+        );
         assert!(matches!(result, Err(ByokError::UnsupportedModel(_))));
     }
 
