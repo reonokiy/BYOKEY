@@ -6,6 +6,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
 
 /// Global request/token counters.
 #[derive(Default)]
@@ -103,19 +104,55 @@ impl UsageStats {
 /// Combines in-memory [`UsageStats`] with an optional persistent [`UsageStore`].
 ///
 /// Every `record_*` call updates the in-memory counters immediately and, if a
-/// store is configured, spawns a background task to persist the record.
+/// store is configured, sends the record to a single background task that
+/// batches writes to reduce spawn overhead and `SQLite` write contention.
 pub struct UsageRecorder {
     stats: UsageStats,
     store: Option<Arc<dyn UsageStore>>,
+    sender: Option<mpsc::UnboundedSender<UsageRecord>>,
 }
 
 impl UsageRecorder {
     /// Creates a new recorder, optionally backed by a persistent store.
+    ///
+    /// When a store is provided a background flush loop is spawned that drains
+    /// records from an mpsc channel in micro-batches (up to 64 at a time).
     #[must_use]
     pub fn new(store: Option<Arc<dyn UsageStore>>) -> Self {
+        let sender = store.as_ref().map(|s| {
+            let (tx, rx) = mpsc::unbounded_channel::<UsageRecord>();
+            let flush_store = Arc::clone(s);
+            tokio::spawn(Self::flush_loop(flush_store, rx));
+            tx
+        });
         Self {
             stats: UsageStats::new(),
             store,
+            sender,
+        }
+    }
+
+    /// Background loop that drains the record channel in micro-batches.
+    async fn flush_loop(store: Arc<dyn UsageStore>, mut rx: mpsc::UnboundedReceiver<UsageRecord>) {
+        const BATCH_CAP: usize = 64;
+        let mut buf: Vec<UsageRecord> = Vec::with_capacity(BATCH_CAP);
+
+        while let Some(record) = rx.recv().await {
+            buf.push(record);
+
+            // Drain any additional records already queued without blocking.
+            while buf.len() < BATCH_CAP {
+                match rx.try_recv() {
+                    Ok(r) => buf.push(r),
+                    Err(_) => break,
+                }
+            }
+
+            for record in buf.drain(..) {
+                if let Err(e) = store.record(&record).await {
+                    tracing::warn!(error = %e, "failed to persist usage record");
+                }
+            }
         }
     }
 
@@ -181,8 +218,7 @@ impl UsageRecorder {
         output_tokens: u64,
         success: bool,
     ) {
-        if let Some(store) = &self.store {
-            let store = store.clone();
+        if let Some(sender) = &self.sender {
             let record = UsageRecord {
                 model: model.to_string(),
                 provider: provider.to_string(),
@@ -190,11 +226,7 @@ impl UsageRecorder {
                 output_tokens,
                 success,
             };
-            tokio::spawn(async move {
-                if let Err(e) = store.record(&record).await {
-                    tracing::warn!(error = %e, "failed to persist usage record");
-                }
-            });
+            let _ = sender.send(record);
         }
     }
 }
