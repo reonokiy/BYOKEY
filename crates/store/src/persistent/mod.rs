@@ -14,13 +14,18 @@ mod history;
 mod token;
 mod usage;
 
+use byokey_types::OAuthToken;
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A persistent [`TokenStore`](byokey_types::TokenStore) backed by `SQLite` via `SeaORM`.
 pub struct SqliteTokenStore {
     /// `SeaORM` database connection.
     db: DatabaseConnection,
+    /// In-memory cache of active tokens keyed by provider string.
+    cache: Mutex<HashMap<String, OAuthToken>>,
 }
 
 pub(crate) fn now_unix() -> i64 {
@@ -44,7 +49,10 @@ impl SqliteTokenStore {
     pub async fn new(database_url: &str) -> std::result::Result<Self, sea_orm::DbErr> {
         let db = Database::connect(database_url).await?;
         Self::migrate(&db).await?;
-        Ok(Self { db })
+        Ok(Self {
+            db,
+            cache: Mutex::new(HashMap::new()),
+        })
     }
 
     /// Exposes the inner `DatabaseConnection` for reuse (e.g. future tables).

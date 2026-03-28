@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use byokey_types::{AccountInfo, ByokError, OAuthToken, ProviderId, TokenStore, traits::Result};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 
 use super::{SqliteTokenStore, db_exec_raw, now_unix};
 use crate::entity::account;
@@ -14,6 +14,11 @@ impl TokenStore for SqliteTokenStore {
     /// Loads the token for the active account of the given provider from `SQLite`.
     async fn load(&self, provider: &ProviderId) -> Result<Option<OAuthToken>> {
         let key = provider.to_string();
+
+        if let Some(token) = self.cache.lock().unwrap().get(&key).cloned() {
+            return Ok(Some(token));
+        }
+
         let row = account::Entity::find()
             .filter(account::Column::Provider.eq(&key))
             .filter(account::Column::IsActive.eq(true))
@@ -25,6 +30,7 @@ impl TokenStore for SqliteTokenStore {
             Some(m) => {
                 let token: OAuthToken = serde_json::from_str(&m.token_json)
                     .map_err(|e| ByokError::Storage(e.to_string()))?;
+                self.cache.lock().unwrap().insert(key, token.clone());
                 Ok(Some(token))
             }
         }
@@ -45,6 +51,7 @@ impl TokenStore for SqliteTokenStore {
             .filter(account::Column::IsActive.eq(true))
             .exec(&self.db)
             .await?;
+        self.cache.lock().unwrap().remove(&key);
         Ok(())
     }
 
@@ -81,7 +88,6 @@ impl TokenStore for SqliteTokenStore {
         let json = serde_json::to_string(token).map_err(|e| ByokError::Storage(e.to_string()))?;
         let now = now_unix();
 
-        // Check if any account is already active for this provider.
         let has_active = account::Entity::find()
             .filter(account::Column::Provider.eq(&key))
             .filter(account::Column::IsActive.eq(true))
@@ -89,43 +95,60 @@ impl TokenStore for SqliteTokenStore {
             .await?
             .is_some();
 
-        // Check if this specific account already exists.
-        let existing = account::Entity::find_by_id((key.clone(), account_id.to_string()))
-            .one(&self.db)
-            .await?;
+        let is_active_val: i32 = i32::from(!has_active);
 
-        if let Some(existing_model) = existing {
-            // Update existing account.
-            let mut active: account::ActiveModel = existing_model.into();
-            active.token_json = Set(json);
-            active.updated_at = Set(now);
-            if let Some(l) = label {
-                active.label = Set(Some(l.to_string()));
-            }
-            active.update(&self.db).await?;
+        if let Some(l) = label {
+            db_exec_raw(
+                &self.db,
+                "INSERT INTO accounts (provider, account_id, is_active, label, token_json, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(provider, account_id) DO UPDATE SET
+                   token_json = excluded.token_json,
+                   label = excluded.label,
+                   updated_at = excluded.updated_at",
+                vec![
+                    key.clone().into(),
+                    account_id.to_string().into(),
+                    is_active_val.into(),
+                    l.to_string().into(),
+                    json.into(),
+                    now.into(),
+                    now.into(),
+                ],
+            )
+            .await
+            .map_err(|e| ByokError::Storage(e.to_string()))?;
         } else {
-            // New accounts become active if no other active account exists.
-            let is_active = !has_active;
-            let model = account::ActiveModel {
-                provider: Set(key),
-                account_id: Set(account_id.to_string()),
-                label: Set(label.map(String::from)),
-                is_active: Set(is_active),
-                token_json: Set(json),
-                created_at: Set(now),
-                updated_at: Set(now),
-            };
-            model.insert(&self.db).await?;
+            db_exec_raw(
+                &self.db,
+                "INSERT INTO accounts (provider, account_id, is_active, token_json, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(provider, account_id) DO UPDATE SET
+                   token_json = excluded.token_json,
+                   updated_at = excluded.updated_at",
+                vec![
+                    key.clone().into(),
+                    account_id.to_string().into(),
+                    is_active_val.into(),
+                    json.into(),
+                    now.into(),
+                    now.into(),
+                ],
+            )
+            .await
+            .map_err(|e| ByokError::Storage(e.to_string()))?;
         }
 
+        self.cache.lock().unwrap().remove(&key);
         Ok(())
     }
 
     async fn remove_account(&self, provider: &ProviderId, account_id: &str) -> Result<()> {
         let key = provider.to_string();
-        account::Entity::delete_by_id((key, account_id.to_string()))
+        account::Entity::delete_by_id((key.clone(), account_id.to_string()))
             .exec(&self.db)
             .await?;
+        self.cache.lock().unwrap().remove(&key);
         Ok(())
     }
 
@@ -174,10 +197,11 @@ impl TokenStore for SqliteTokenStore {
         db_exec_raw(
             &self.db,
             "UPDATE accounts SET is_active = 1 WHERE provider = ? AND account_id = ?",
-            vec![key.into(), account_id.to_string().into()],
+            vec![key.clone().into(), account_id.to_string().into()],
         )
         .await?;
 
+        self.cache.lock().unwrap().remove(&key);
         Ok(())
     }
 
