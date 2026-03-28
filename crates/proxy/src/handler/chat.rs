@@ -21,7 +21,7 @@ use crate::{AppState, UsageRecorder, error::ApiError};
 ///
 /// Each chunk is forwarded unchanged. When the stream ends, the accumulated
 /// `prompt_tokens` / `completion_tokens` are recorded via [`UsageRecorder`].
-fn tap_stream_usage(
+pub(crate) fn tap_stream_usage(
     inner: ByteStream,
     usage: Arc<UsageRecorder>,
     model: String,

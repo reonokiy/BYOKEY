@@ -20,11 +20,11 @@ use byokey_provider::CopilotExecutor;
 use byokey_provider::claude_headers::{ANTHROPIC_BETA, ANTHROPIC_VERSION};
 use byokey_provider::cloak::inject_billing_header;
 use byokey_types::{ByokError, ProviderId};
-use futures_util::TryStreamExt as _;
+use futures_util::{StreamExt as _, TryStreamExt as _, stream::try_unfold};
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::{AppState, error::ApiError};
+use crate::{AppState, UsageRecorder, error::ApiError};
 
 const API_URL: &str = "https://api.anthropic.com/v1/messages?beta=true";
 
@@ -198,13 +198,19 @@ pub async fn anthropic_messages(
         beta = %beta, "anthropic passthrough"
     );
 
+    let model_name = body
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_string();
+
     let resp = builder
         .json(&body)
         .send()
         .await
         .map_err(|e| ApiError(ByokError::from(e)))?;
 
-    forward_response(resp, stream).await
+    forward_response(resp, stream, &state.usage, &model_name, "claude").await
 }
 
 /// Handles `POST /copilot/v1/messages` — always routes through Copilot.
@@ -253,6 +259,7 @@ fn build_copilot_messages_request(
 ///
 /// With multiple Copilot accounts, retries with quota-aware rotation
 /// on transient failures.
+#[allow(clippy::too_many_lines)]
 async fn copilot_messages(
     state: &Arc<AppState>,
     body: Value,
@@ -291,6 +298,11 @@ async fn copilot_messages(
         "application/json"
     };
     let initiator = detect_initiator(&body);
+    let model_name = body
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_string();
 
     let mut last_err = None;
     for attempt in 0..max_attempts {
@@ -328,7 +340,9 @@ async fn copilot_messages(
         .await;
 
         match resp {
-            Ok(r) if r.status().is_success() => return forward_response(r, stream).await,
+            Ok(r) if r.status().is_success() => {
+                return forward_response(r, stream, &state.usage, &model_name, "copilot").await;
+            }
             Ok(r) => {
                 let status = r.status().as_u16();
                 let text = r.text().await.unwrap_or_default();
@@ -360,12 +374,115 @@ async fn copilot_messages(
         }
     }
 
+    state.usage.record_failure(&model_name, "copilot");
     Err(last_err
         .unwrap_or_else(|| ApiError(ByokError::Auth("no copilot accounts available".into()))))
 }
 
-/// Forward an upstream response back to the client (shared by both backends).
-async fn forward_response(resp: rquest::Response, stream: bool) -> Result<Response, ApiError> {
+/// Extract token counts from an Anthropic non-streaming response.
+fn extract_anthropic_usage(json: &Value) -> (u64, u64) {
+    let usage = json.get("usage");
+    let input = usage
+        .and_then(|u| u.get("input_tokens"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let output = usage
+        .and_then(|u| u.get("output_tokens"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    (input, output)
+}
+
+/// Wraps a raw byte stream to extract token usage from Anthropic SSE events.
+///
+/// Scans for `message_start` (input tokens) and `message_delta` (output tokens)
+/// events, forwards all bytes unchanged, and records usage when the stream ends.
+fn tap_anthropic_stream_usage(
+    resp: rquest::Response,
+    usage: Arc<UsageRecorder>,
+    model: String,
+    provider: String,
+) -> byokey_types::traits::ByteStream {
+    use byokey_types::ByokError as BE;
+
+    struct State {
+        inner: byokey_types::traits::ByteStream,
+        buf: Vec<u8>,
+        usage: Arc<UsageRecorder>,
+        model: String,
+        provider: String,
+        input_tokens: u64,
+        output_tokens: u64,
+    }
+
+    let inner: byokey_types::traits::ByteStream =
+        Box::pin(resp.bytes_stream().map(|r| r.map_err(BE::from)));
+
+    Box::pin(try_unfold(
+        State {
+            inner,
+            buf: Vec::new(),
+            usage,
+            model,
+            provider,
+            input_tokens: 0,
+            output_tokens: 0,
+        },
+        |mut s| async move {
+            match s.inner.next().await {
+                Some(Ok(bytes)) => {
+                    s.buf.extend_from_slice(&bytes);
+                    while let Some(nl) = s.buf.iter().position(|&b| b == b'\n') {
+                        let line: Vec<u8> = s.buf.drain(..=nl).collect();
+                        let line = String::from_utf8_lossy(&line);
+                        let line = line.trim();
+                        if let Some(data) = line.strip_prefix("data: ")
+                            && let Ok(ev) = serde_json::from_str::<Value>(data)
+                        {
+                            match ev.get("type").and_then(Value::as_str) {
+                                Some("message_start") => {
+                                    if let Some(v) = ev
+                                        .pointer("/message/usage/input_tokens")
+                                        .and_then(Value::as_u64)
+                                    {
+                                        s.input_tokens = v;
+                                    }
+                                }
+                                Some("message_delta") => {
+                                    if let Some(v) =
+                                        ev.pointer("/usage/output_tokens").and_then(Value::as_u64)
+                                    {
+                                        s.output_tokens = v;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Ok(Some((bytes, s)))
+                }
+                Some(Err(e)) => {
+                    s.usage.record_failure(&s.model, &s.provider);
+                    Err(e)
+                }
+                None => {
+                    s.usage
+                        .record_success(&s.model, &s.provider, s.input_tokens, s.output_tokens);
+                    Ok(None)
+                }
+            }
+        },
+    ))
+}
+
+/// Forward an upstream response back to the client, recording token usage.
+async fn forward_response(
+    resp: rquest::Response,
+    stream: bool,
+    usage: &Arc<UsageRecorder>,
+    model: &str,
+    provider: &str,
+) -> Result<Response, ApiError> {
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
@@ -374,6 +491,7 @@ async fn forward_response(resp: rquest::Response, stream: bool) -> Result<Respon
             body = %text,
             "anthropic upstream error"
         );
+        usage.record_failure(model, provider);
         return Err(ApiError::from(ByokError::Upstream {
             status: status.as_u16(),
             body: text,
@@ -384,10 +502,14 @@ async fn forward_response(resp: rquest::Response, stream: bool) -> Result<Respon
     let upstream_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK);
 
     if stream {
-        let byte_stream = resp
-            .bytes_stream()
-            .map_err(|e| std::io::Error::other(e.to_string()));
-        let out_body = Body::from_stream(byte_stream);
+        let tapped = tap_anthropic_stream_usage(
+            resp,
+            usage.clone(),
+            model.to_string(),
+            provider.to_string(),
+        );
+        let mapped = tapped.map_err(|e| std::io::Error::other(e.to_string()));
+        let out_body = Body::from_stream(mapped);
         Ok(Response::builder()
             .status(upstream_status)
             .header("content-type", "text/event-stream")
@@ -400,6 +522,8 @@ async fn forward_response(resp: rquest::Response, stream: bool) -> Result<Respon
             .json()
             .await
             .map_err(|e| ApiError(ByokError::from(e)))?;
+        let (input, output) = extract_anthropic_usage(&json);
+        usage.record_success(model, provider, input, output);
         Ok((upstream_status, axum::Json(json)).into_response())
     }
 }

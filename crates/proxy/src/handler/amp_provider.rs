@@ -21,11 +21,11 @@ use axum::{
 };
 use byokey_types::{ByokError, ProviderId};
 use bytes::Bytes;
-use futures_util::TryStreamExt as _;
+use futures_util::{StreamExt as _, TryStreamExt as _, stream::try_unfold};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{AppState, error::ApiError};
+use crate::{AppState, UsageRecorder, error::ApiError};
 
 /// Codex OAuth Responses endpoint (`ChatGPT` subscription).
 const CODEX_RESPONSES_URL: &str = "https://chatgpt.com/backend-api/codex/responses";
@@ -44,6 +44,189 @@ const AMP_BACKEND: &str = "https://ampcode.com";
 
 use super::{CLIENT_AUTH_HEADERS, FINGERPRINT_HEADERS, HOP_BY_HOP};
 
+// ── Usage extraction helpers ────────────────────────────────────────────
+
+/// Extract token counts from a Codex Responses API non-streaming response.
+fn extract_codex_usage(json: &Value) -> (u64, u64) {
+    let usage = json.get("usage");
+    let input = usage
+        .and_then(|u| u.get("input_tokens"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let output = usage
+        .and_then(|u| u.get("output_tokens"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    (input, output)
+}
+
+/// Wraps a raw byte stream to extract token usage from Codex Responses SSE events.
+///
+/// Scans for `response.completed` events containing `response.usage.input_tokens`
+/// and `response.usage.output_tokens`, forwards all bytes unchanged.
+fn tap_codex_stream_usage(
+    resp: rquest::Response,
+    usage: Arc<UsageRecorder>,
+    model: String,
+    provider: String,
+) -> byokey_types::traits::ByteStream {
+    use byokey_types::ByokError as BE;
+
+    struct State {
+        inner: byokey_types::traits::ByteStream,
+        buf: Vec<u8>,
+        usage: Arc<UsageRecorder>,
+        model: String,
+        provider: String,
+        input_tokens: u64,
+        output_tokens: u64,
+    }
+
+    let inner: byokey_types::traits::ByteStream =
+        Box::pin(resp.bytes_stream().map(|r| r.map_err(BE::from)));
+
+    Box::pin(try_unfold(
+        State {
+            inner,
+            buf: Vec::new(),
+            usage,
+            model,
+            provider,
+            input_tokens: 0,
+            output_tokens: 0,
+        },
+        |mut s| async move {
+            match s.inner.next().await {
+                Some(Ok(bytes)) => {
+                    s.buf.extend_from_slice(&bytes);
+                    while let Some(nl) = s.buf.iter().position(|&b| b == b'\n') {
+                        let line: Vec<u8> = s.buf.drain(..=nl).collect();
+                        let line = String::from_utf8_lossy(&line);
+                        let line = line.trim();
+                        if let Some(data) = line.strip_prefix("data: ")
+                            && let Ok(ev) = serde_json::from_str::<Value>(data)
+                            && ev.get("type").and_then(Value::as_str) == Some("response.completed")
+                        {
+                            if let Some(v) = ev
+                                .pointer("/response/usage/input_tokens")
+                                .and_then(Value::as_u64)
+                            {
+                                s.input_tokens = v;
+                            }
+                            if let Some(v) = ev
+                                .pointer("/response/usage/output_tokens")
+                                .and_then(Value::as_u64)
+                            {
+                                s.output_tokens = v;
+                            }
+                        }
+                    }
+                    Ok(Some((bytes, s)))
+                }
+                Some(Err(e)) => {
+                    s.usage.record_failure(&s.model, &s.provider);
+                    Err(e)
+                }
+                None => {
+                    s.usage
+                        .record_success(&s.model, &s.provider, s.input_tokens, s.output_tokens);
+                    Ok(None)
+                }
+            }
+        },
+    ))
+}
+
+/// Extract token counts from a Gemini native non-streaming response.
+fn extract_gemini_usage(json: &Value) -> (u64, u64) {
+    let meta = json.get("usageMetadata");
+    let input = meta
+        .and_then(|u| u.get("promptTokenCount"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let output = meta
+        .and_then(|u| u.get("candidatesTokenCount"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    (input, output)
+}
+
+/// Wraps a raw byte stream to extract token usage from Gemini native SSE events.
+///
+/// Scans each SSE data line for `usageMetadata` (last occurrence wins).
+fn tap_gemini_stream_usage(
+    resp: rquest::Response,
+    usage: Arc<UsageRecorder>,
+    model: String,
+    provider: String,
+) -> byokey_types::traits::ByteStream {
+    use byokey_types::ByokError as BE;
+
+    struct State {
+        inner: byokey_types::traits::ByteStream,
+        buf: Vec<u8>,
+        usage: Arc<UsageRecorder>,
+        model: String,
+        provider: String,
+        input_tokens: u64,
+        output_tokens: u64,
+    }
+
+    let inner: byokey_types::traits::ByteStream =
+        Box::pin(resp.bytes_stream().map(|r| r.map_err(BE::from)));
+
+    Box::pin(try_unfold(
+        State {
+            inner,
+            buf: Vec::new(),
+            usage,
+            model,
+            provider,
+            input_tokens: 0,
+            output_tokens: 0,
+        },
+        |mut s| async move {
+            match s.inner.next().await {
+                Some(Ok(bytes)) => {
+                    s.buf.extend_from_slice(&bytes);
+                    while let Some(nl) = s.buf.iter().position(|&b| b == b'\n') {
+                        let line: Vec<u8> = s.buf.drain(..=nl).collect();
+                        let line = String::from_utf8_lossy(&line);
+                        let line = line.trim();
+                        if let Some(data) = line.strip_prefix("data: ")
+                            && let Ok(ev) = serde_json::from_str::<Value>(data)
+                            && ev.get("usageMetadata").is_some()
+                        {
+                            if let Some(v) = ev
+                                .pointer("/usageMetadata/promptTokenCount")
+                                .and_then(Value::as_u64)
+                            {
+                                s.input_tokens = v;
+                            }
+                            if let Some(v) = ev
+                                .pointer("/usageMetadata/candidatesTokenCount")
+                                .and_then(Value::as_u64)
+                            {
+                                s.output_tokens = v;
+                            }
+                        }
+                    }
+                    Ok(Some((bytes, s)))
+                }
+                Some(Err(e)) => {
+                    s.usage.record_failure(&s.model, &s.provider);
+                    Err(e)
+                }
+                None => {
+                    s.usage
+                        .record_success(&s.model, &s.provider, s.input_tokens, s.output_tokens);
+                    Ok(None)
+                }
+            }
+        },
+    ))
+}
+
 /// Handles `POST /api/provider/openai/v1/responses`.
 ///
 /// `AmpCode` sends requests already formatted as `OpenAI` Responses API objects
@@ -61,6 +244,12 @@ pub async fn codex_responses_passthrough(
         .providers
         .get(&ProviderId::Codex)
         .and_then(|pc| pc.api_key.clone());
+
+    let model_name = body
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_string();
 
     let (is_oauth, token) = if let Some(key) = api_key {
         (false, key)
@@ -98,9 +287,11 @@ pub async fn codex_responses_passthrough(
     }
     .map_err(|e| ApiError(ByokError::from(e)))?;
 
+    let provider = "codex";
     let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
+        state.usage.record_failure(&model_name, provider);
         return Err(ApiError::from(ByokError::Upstream {
             status: status.as_u16(),
             body: text,
@@ -115,21 +306,25 @@ pub async fn codex_responses_passthrough(
         .is_some_and(|ct| ct.contains("text/event-stream"));
 
     if is_sse {
-        let stream = resp
-            .bytes_stream()
-            .map_err(|e| std::io::Error::other(e.to_string()));
+        let tapped =
+            tap_codex_stream_usage(resp, state.usage.clone(), model_name, provider.to_string());
+        let mapped = tapped.map_err(|e| std::io::Error::other(e.to_string()));
         Ok(Response::builder()
             .status(status)
             .header("content-type", "text/event-stream")
             .header("cache-control", "no-cache")
             .header("x-accel-buffering", "no")
-            .body(Body::from_stream(stream))
+            .body(Body::from_stream(mapped))
             .expect("valid response"))
     } else {
         let json: Value = resp
             .json()
             .await
             .map_err(|e| ApiError(ByokError::from(e)))?;
+        let (input, output) = extract_codex_usage(&json);
+        state
+            .usage
+            .record_success(&model_name, provider, input, output);
         Ok((status, axum::Json(json)).into_response())
     }
 }
@@ -215,9 +410,11 @@ pub async fn gemini_native_passthrough(
         .await
         .map_err(|e| ApiError(ByokError::from(e)))?;
 
+    let provider = "gemini";
     let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
+        state.usage.record_failure(model_name, provider);
         return Err(ApiError::from(ByokError::Upstream {
             status: status.as_u16(),
             body: text,
@@ -233,21 +430,29 @@ pub async fn gemini_native_passthrough(
         .to_string();
 
     if content_type.contains("text/event-stream") {
-        let stream = resp
-            .bytes_stream()
-            .map_err(|e| std::io::Error::other(e.to_string()));
+        let tapped = tap_gemini_stream_usage(
+            resp,
+            state.usage.clone(),
+            model_name.to_string(),
+            provider.to_string(),
+        );
+        let mapped = tapped.map_err(|e| std::io::Error::other(e.to_string()));
         Ok(Response::builder()
             .status(status)
             .header("content-type", content_type)
             .header("cache-control", "no-cache")
             .header("x-accel-buffering", "no")
-            .body(Body::from_stream(stream))
+            .body(Body::from_stream(mapped))
             .expect("valid response"))
     } else {
         let json: Value = resp
             .json()
             .await
             .map_err(|e| ApiError(ByokError::from(e)))?;
+        let (input, output) = extract_gemini_usage(&json);
+        state
+            .usage
+            .record_success(model_name, provider, input, output);
         Ok((status, axum::Json(json)).into_response())
     }
 }
@@ -302,14 +507,33 @@ async fn gemini_native_via_backend(
             )))
         })?;
 
+    let provider_name = backend_id.to_string();
+
     // Send through the backend executor.
-    let provider_resp = executor
-        .chat_completion(chat_request)
-        .await
-        .map_err(ApiError::from)?;
+    let provider_resp = match executor.chat_completion(chat_request).await {
+        Ok(r) => r,
+        Err(e) => {
+            state.usage.record_failure(model, &provider_name);
+            return Err(ApiError::from(e));
+        }
+    };
 
     match provider_resp {
         byokey_types::traits::ProviderResponse::Complete(openai_resp) => {
+            // Extract usage from the OpenAI-format response before translating.
+            let usage_obj = openai_resp.get("usage");
+            let input = usage_obj
+                .and_then(|u| u.get("prompt_tokens"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let output = usage_obj
+                .and_then(|u| u.get("completion_tokens"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            state
+                .usage
+                .record_success(model, &provider_name, input, output);
+
             let gemini_resp: Value = byokey_translate::OpenAIResponseToGemini {
                 body: &openai_resp,
                 model,
@@ -319,9 +543,15 @@ async fn gemini_native_via_backend(
             Ok(axum::Json(gemini_resp).into_response())
         }
         byokey_types::traits::ProviderResponse::Stream(byte_stream) => {
-            // Translate each OpenAI SSE chunk → Gemini native SSE chunk.
+            // Tap the OpenAI stream for usage before translating to Gemini SSE.
+            let tapped = super::chat::tap_stream_usage(
+                byte_stream,
+                state.usage.clone(),
+                model.to_string(),
+                provider_name,
+            );
             let model_owned = model.to_string();
-            let translated = byte_stream_to_gemini_sse(byte_stream, model_owned);
+            let translated = byte_stream_to_gemini_sse(tapped, model_owned);
             let mapped = translated.map_err(|e| std::io::Error::other(e.to_string()));
             Ok(Response::builder()
                 .status(StatusCode::OK)
