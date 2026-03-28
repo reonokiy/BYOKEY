@@ -17,9 +17,12 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 }
 
 struct ContentView: View {
+    @Environment(ProcessManager.self) private var pm
     @State private var selection: SidebarItem? = .general
 
     var body: some View {
+        @Bindable var pm = pm
+
         NavigationSplitView {
             List(SidebarItem.allCases, selection: $selection) { item in
                 Label(item.rawValue, systemImage: item.icon)
@@ -34,7 +37,13 @@ struct ContentView: View {
             case nil:       Text("Select a page")
             }
         }
-        .frame(width: 560, height: 400)
+        .frame(minWidth: 480, minHeight: 320)
+        .alert("Server Error", isPresented: $pm.showError) {
+            Button("Reload") { pm.restart() }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(pm.errorMessage ?? "Unknown error")
+        }
     }
 }
 

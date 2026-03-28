@@ -6,6 +6,7 @@ final class ProcessManager {
     private(set) var isReachable = false
     private(set) var logs: [String] = []
     private(set) var errorMessage: String?
+    var showError = false
 
     private var process: Process?
     private var healthTask: Task<Void, Never>?
@@ -81,6 +82,12 @@ final class ProcessManager {
                 self.isReachable = false
                 self.process = nil
 
+                if p.terminationStatus != 0 {
+                    let tail = self.logs.suffix(5).joined(separator: "\n")
+                    self.errorMessage = tail.isEmpty ? "Process exited with code \(p.terminationStatus)" : tail
+                    self.showError = true
+                }
+
                 if self.shouldAutoRestart, p.terminationReason == .uncaughtSignal {
                     self.logs.append("[byokey] process crashed, restarting in 2s…")
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
@@ -97,6 +104,7 @@ final class ProcessManager {
             startHealthMonitoring()
         } catch {
             errorMessage = "Failed to start: \(error.localizedDescription)"
+            showError = true
         }
     }
 
