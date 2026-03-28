@@ -3,8 +3,8 @@ import Foundation
 
 /// Reads and writes `~/.config/byokey/settings.json`.
 ///
-/// Only touches the fields exposed in the UI; unknown keys are preserved
-/// across load/save cycles so hand-edited config is never destroyed.
+/// Uses a typed `Codable` struct for known fields. Unknown keys are preserved
+/// across load/save cycles via a raw overlay so hand-edited config is never destroyed.
 @Observable
 final class ConfigManager {
     // MARK: - Server
@@ -29,13 +29,32 @@ final class ConfigManager {
 
     private(set) var configFileExists = false
     private(set) var needsRestart = false
-    private var rawConfig: [String: Any] = [:]
+    private var rawOverlay: [String: Any] = [:]
     private var isLoading = false
     private var saveTask: Task<Void, Never>?
 
     var configURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/byokey/settings.json")
+    }
+
+    // MARK: - Codable Schema
+
+    private struct ConfigFile: Codable {
+        var port: Int?
+        var host: String?
+        var proxy_url: String?
+        var log: LogConfig?
+        var streaming: StreamingConfig?
+
+        struct LogConfig: Codable {
+            var level: String?
+        }
+
+        struct StreamingConfig: Codable {
+            var keepalive_seconds: Int?
+            var bootstrap_retries: Int?
+        }
     }
 
     // MARK: - Load
@@ -46,25 +65,20 @@ final class ConfigManager {
 
         let url = configURL
         configFileExists = FileManager.default.fileExists(atPath: url.path)
+        guard configFileExists, let data = try? Data(contentsOf: url) else { return }
 
-        guard configFileExists,
-              let data = try? Data(contentsOf: url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return }
+        // Preserve raw overlay for unknown keys
+        rawOverlay = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
 
-        rawConfig = json
-        port = (json["port"] as? NSNumber)?.intValue ?? AppEnvironment.defaultPort
-        host = json["host"] as? String ?? "127.0.0.1"
-        proxyUrl = json["proxy_url"] as? String ?? ""
+        // Decode typed fields
+        guard let config = try? JSONDecoder().decode(ConfigFile.self, from: data) else { return }
 
-        if let log = json["log"] as? [String: Any] {
-            logLevel = log["level"] as? String ?? "info"
-        }
-
-        if let streaming = json["streaming"] as? [String: Any] {
-            keepaliveSeconds = (streaming["keepalive_seconds"] as? NSNumber)?.intValue ?? 15
-            bootstrapRetries = (streaming["bootstrap_retries"] as? NSNumber)?.intValue ?? 1
-        }
+        port = config.port ?? AppEnvironment.defaultPort
+        host = config.host ?? "127.0.0.1"
+        proxyUrl = config.proxy_url ?? ""
+        logLevel = config.log?.level ?? "info"
+        keepaliveSeconds = config.streaming?.keepalive_seconds ?? 15
+        bootstrapRetries = config.streaming?.bootstrap_retries ?? 1
     }
 
     // MARK: - Save
@@ -81,30 +95,35 @@ final class ConfigManager {
     }
 
     func save() {
-        rawConfig["port"] = port
-        rawConfig["host"] = host
+        // Build typed config
+        var config = ConfigFile()
+        config.port = port
+        config.host = host
+        config.proxy_url = proxyUrl.isEmpty ? nil : proxyUrl
+        config.log = .init(level: logLevel)
+        config.streaming = .init(
+            keepalive_seconds: keepaliveSeconds,
+            bootstrap_retries: bootstrapRetries
+        )
 
-        if proxyUrl.isEmpty {
-            rawConfig.removeValue(forKey: "proxy_url")
-        } else {
-            rawConfig["proxy_url"] = proxyUrl
+        // Encode typed → merge onto raw overlay (preserving unknown keys)
+        if let typedData = try? JSONEncoder().encode(config),
+           let typedDict = try? JSONSerialization.jsonObject(with: typedData) as? [String: Any]
+        {
+            for (key, value) in typedDict {
+                rawOverlay[key] = value
+            }
+            // Remove proxy_url key entirely if empty
+            if proxyUrl.isEmpty {
+                rawOverlay.removeValue(forKey: "proxy_url")
+            }
         }
 
-        var log = rawConfig["log"] as? [String: Any] ?? [:]
-        log["level"] = logLevel
-        rawConfig["log"] = log
-
-        var streaming = rawConfig["streaming"] as? [String: Any] ?? [:]
-        streaming["keepalive_seconds"] = keepaliveSeconds
-        streaming["bootstrap_retries"] = bootstrapRetries
-        rawConfig["streaming"] = streaming
-
-        // Create directory if needed.
         let dir = configURL.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         guard let data = try? JSONSerialization.data(
-            withJSONObject: rawConfig,
+            withJSONObject: rawOverlay,
             options: [.prettyPrinted, .sortedKeys]
         ) else { return }
         try? data.write(to: configURL, options: .atomic)
