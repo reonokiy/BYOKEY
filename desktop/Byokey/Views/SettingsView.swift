@@ -1,10 +1,28 @@
+import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(ProcessManager.self) private var pm
     @State private var config = ConfigManager()
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         Form {
+            Section("General") {
+                Toggle("Launch at Login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, newValue in
+                        do {
+                            if newValue {
+                                try SMAppService.mainApp.register()
+                            } else {
+                                SMAppService.mainApp.unregister { _ in }
+                            }
+                        } catch {
+                            launchAtLogin = SMAppService.mainApp.status == .enabled
+                        }
+                    }
+            }
+
             Section("Server") {
                 TextField("Port", value: $config.port, format: .number.grouping(.never))
                     .monospacedDigit()
@@ -63,7 +81,14 @@ struct SettingsView: View {
             } header: {
                 Text("Config File")
             } footer: {
-                Text("Changes are saved automatically. The daemon reloads the config file on change.")
+                Text("Changes are saved automatically. Restart the server to apply.")
+            }
+
+            Section {
+                Button("Restart Server") {
+                    pm.restart(port: config.port)
+                }
+                .disabled(!pm.isRunning)
             }
         }
         .formStyle(.grouped)
@@ -74,4 +99,5 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
+        .environment(ProcessManager())
 }

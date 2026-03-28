@@ -34,9 +34,11 @@ struct ContentView: View {
             case nil:       Text("Select a page")
             }
         }
+        .frame(width: 560, height: 400)
     }
 }
 
 #Preview {
     ContentView()
+        .environment(ProcessManager())
 }

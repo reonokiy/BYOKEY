@@ -1,10 +1,7 @@
 import Foundation
 
 enum CLIRunner {
-    static var binaryURL: URL {
-        Bundle.main.bundleURL
-            .appending(path: AppEnvironment.daemonBinaryPath)
-    }
+    static var binaryURL: URL { ProcessManager.binaryURL }
 
     static func login(provider: String, account: String? = nil) async throws {
         let process = Process()

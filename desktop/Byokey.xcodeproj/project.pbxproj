@@ -9,29 +9,10 @@
 /* Begin PBXBuildFile section */
 		BA0A10052F5460010096A005 /* OpenAPIRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = BA0A10022F5460010096A002 /* OpenAPIRuntime */; };
 		BA0A10062F5460010096A006 /* OpenAPIURLSession in Frameworks */ = {isa = PBXBuildFile; productRef = BA0A10032F5460010096A003 /* OpenAPIURLSession */; };
-		BAD6C0D12F53FC2500968364 /* io.byokey.desktop.daemon.plist in Copy LaunchAgent Plist */ = {isa = PBXBuildFile; fileRef = BAD6C0D02F53FC2500968364 /* io.byokey.desktop.daemon.plist */; };
-		BA0A10082F5460010096A008 /* io.byokey.desktop.dev.daemon.plist in Copy LaunchAgent Plist */ = {isa = PBXBuildFile; fileRef = BA0A10072F5460010096A007 /* io.byokey.desktop.dev.daemon.plist */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-		BAD6C0D42F53FC2500968364 /* Copy LaunchAgent Plist */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = Contents/Library/LaunchAgents;
-			dstSubfolderSpec = 1;
-			files = (
-				BAD6C0D12F53FC2500968364 /* io.byokey.desktop.daemon.plist in Copy LaunchAgent Plist */,
-				BA0A10082F5460010096A008 /* io.byokey.desktop.dev.daemon.plist in Copy LaunchAgent Plist */,
-			);
-			name = "Copy LaunchAgent Plist";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXFileReference section */
-		BAD6C0B52F53FC2500968364 /* Byokey.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Byokey.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		BAD6C0D02F53FC2500968364 /* io.byokey.desktop.daemon.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = io.byokey.desktop.daemon.plist; sourceTree = "<group>"; };
-		BA0A10072F5460010096A007 /* io.byokey.desktop.dev.daemon.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = io.byokey.desktop.dev.daemon.plist; sourceTree = "<group>"; };
+		BAD6C0B52F53FC2500968364 /* Byokey.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = Byokey.app; path = "Byokey Dev.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -59,7 +40,6 @@
 			isa = PBXGroup;
 			children = (
 				BAD6C0B72F53FC2500968364 /* Byokey */,
-				BAD6C0D22F53FC2500968364 /* LaunchDaemons */,
 				BAD6C0B62F53FC2500968364 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -72,15 +52,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		BAD6C0D22F53FC2500968364 /* LaunchDaemons */ = {
-			isa = PBXGroup;
-			children = (
-				BAD6C0D02F53FC2500968364 /* io.byokey.desktop.daemon.plist */,
-				BA0A10072F5460010096A007 /* io.byokey.desktop.dev.daemon.plist */,
-			);
-			path = LaunchDaemons;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -88,12 +59,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = BAD6C0C42F53FC2500968364 /* Build configuration list for PBXNativeTarget "Byokey" */;
 			buildPhases = (
-				BAD6C0D32F53FC2500968364 /* Build Rust Daemon */,
+				BAD6C0D32F53FC2500968364 /* Build Rust Binary */,
 				BAD6C0B12F53FC2500968364 /* Sources */,
 				BAD6C0B22F53FC2500968364 /* Frameworks */,
 				BAD6C0B32F53FC2500968364 /* Resources */,
-				BAD6C0D42F53FC2500968364 /* Copy LaunchAgent Plist */,
-				BAD6C0D52F53FC2500968364 /* Sign Rust Daemon */,
+				BAD6C0D52F53FC2500968364 /* Sign Rust Binary */,
 			);
 			buildRules = (
 			);
@@ -160,7 +130,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		BAD6C0D32F53FC2500968364 /* Build Rust Daemon */ = {
+		BAD6C0D32F53FC2500968364 /* Build Rust Binary */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -168,26 +138,26 @@
 			);
 			inputPaths = (
 			);
-			name = "Build Rust Daemon";
+			name = "Build Rust Binary";
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "#!/bin/bash\nset -euo pipefail\nRUST_DIR=\"${PROJECT_DIR}/..\"\nDAEMON_NAME=\"${PRODUCT_BUNDLE_IDENTIFIER}.daemon\"\nif [ \"${CONFIGURATION}\" = \"Release\" ]; then\n    CARGO_FLAGS=\"--release\"; RUST_PROFILE=\"release\"\nelse\n    CARGO_FLAGS=\"\"; RUST_PROFILE=\"debug\"\nfi\ncase \"${ARCHS}\" in\n    *arm64*) RUST_TARGET=\"aarch64-apple-darwin\" ;;\n    *)       RUST_TARGET=\"x86_64-apple-darwin\" ;;\nesac\nexport PATH=\"$HOME/.cargo/bin:$PATH\"\ncd \"${RUST_DIR}\"\ncargo build ${CARGO_FLAGS} --target \"${RUST_TARGET}\"\nOUTPUT_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Helpers\"\nmkdir -p \"${OUTPUT_DIR}\"\ncp -f \"${RUST_DIR}/target/${RUST_TARGET}/${RUST_PROFILE}/byokey\" \"${OUTPUT_DIR}/${DAEMON_NAME}\"\n";
+			shellScript = "\"${PROJECT_DIR}/scripts/build-rust.sh\"\n";
 		};
-		BAD6C0D52F53FC2500968364 /* Sign Rust Daemon */ = {
+		BAD6C0D52F53FC2500968364 /* Sign Rust Binary */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputPaths = (
 			);
-			name = "Sign Rust Daemon";
+			name = "Sign Rust Binary";
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "#!/bin/bash\nset -euo pipefail\nDAEMON_NAME=\"${PRODUCT_BUNDLE_IDENTIFIER}.daemon\"\nDAEMON_PATH=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/${DAEMON_NAME}\"\nAPP_XCENT=\"${TARGET_TEMP_DIR}/${PRODUCT_NAME}.app.xcent\"\n\nif [ ! -f \"${DAEMON_PATH}\" ]; then\n    echo \"error: Daemon binary not found at ${DAEMON_PATH}\" >&2\n    exit 1\nfi\n\nif [ -f \"${APP_XCENT}\" ]; then\n    codesign --force --options runtime --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp --identifier \"${DAEMON_NAME}\" --entitlements \"${APP_XCENT}\" \"${DAEMON_PATH}\"\nelse\n    codesign --force --options runtime --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp --identifier \"${DAEMON_NAME}\" \"${DAEMON_PATH}\"\nfi\n";
+			shellScript = "\"${PROJECT_DIR}/scripts/sign-rust.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -334,7 +304,9 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_RustWorkspaceDir = "$(PROJECT_DIR)/..";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -361,6 +333,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

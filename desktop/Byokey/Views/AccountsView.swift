@@ -2,7 +2,7 @@ import SwiftUI
 import OpenAPIURLSession
 
 struct AccountsView: View {
-    @State private var daemon = DaemonManager()
+    @Environment(ProcessManager.self) private var pm
     @State private var providerAccounts: [Components.Schemas.ProviderAccounts] = []
     @State private var isLoading = false
     @State private var loginInProgress: String?
@@ -15,7 +15,7 @@ struct AccountsView: View {
 
     var body: some View {
         Group {
-            if daemon.isReachable {
+            if pm.isReachable {
                 Form {
                     if isLoading && providerAccounts.isEmpty {
                         Section {
@@ -79,39 +79,30 @@ struct AccountsView: View {
                     }
                 }
                 .formStyle(.grouped)
-            } else if daemon.isTransitioning {
+            } else if pm.isRunning {
                 ContentUnavailableView {
                     ProgressView()
                         .controlSize(.large)
                 } description: {
-                    Text("Connecting to daemon…")
+                    Text("Waiting for server…")
                 }
             } else {
                 ContentUnavailableView(
-                    "Daemon Not Running",
+                    "Server Not Running",
                     systemImage: "server.rack",
-                    description: Text("Enable the daemon to manage accounts.")
+                    description: Text("Enable the proxy server to manage accounts.")
                 )
             }
         }
         .navigationTitle("Accounts")
-        .onAppear {
-            daemon.refresh()
-            daemon.startMonitoring()
-        }
-        .onDisappear {
-            daemon.stopMonitoring()
-        }
-        .task {
-            await loadAccounts()
-        }
-        .onChange(of: daemon.isReachable) {
+        .task { await loadAccounts() }
+        .onChange(of: pm.isReachable) {
             Task { await loadAccounts() }
         }
     }
 
     private func loadAccounts() async {
-        guard daemon.isReachable else {
+        guard pm.isReachable else {
             providerAccounts = []
             return
         }
@@ -154,7 +145,6 @@ struct AccountsView: View {
         errorMessage = nil
         do {
             try await CLIRunner.login(provider: provider)
-            // Give daemon a moment to pick up the new token
             try? await Task.sleep(for: .seconds(1))
             await loadAccounts()
         } catch {
@@ -240,4 +230,5 @@ private struct AccountRow: View {
 
 #Preview {
     AccountsView()
+        .environment(ProcessManager())
 }

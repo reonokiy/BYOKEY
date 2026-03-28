@@ -2,29 +2,24 @@ import SwiftUI
 import OpenAPIURLSession
 
 struct GeneralView: View {
-    @State private var daemon = DaemonManager()
+    @Environment(ProcessManager.self) private var pm
     @State private var providers: [Components.Schemas.ProviderStatus] = []
     @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
         Form {
-            Section("Daemon") {
+            Section("Proxy Server") {
                 LabeledContent("Status") {
                     HStack(spacing: 6) {
-                        switch daemon.statusSummary {
-                        case .transitioning:
+                        if pm.isReachable {
+                            Circle().fill(.green).frame(width: 8, height: 8)
+                            Text("Running")
+                        } else if pm.isRunning {
                             ProgressView()
                                 .controlSize(.small)
                             Text("Starting…")
                                 .foregroundStyle(.secondary)
-                        case .running:
-                            Circle().fill(.green).frame(width: 8, height: 8)
-                            Text("Running")
-                        case .registered:
-                            Circle().fill(.orange).frame(width: 8, height: 8)
-                            Text("Registered")
-                                .foregroundStyle(.secondary)
-                        case .stopped:
+                        } else {
                             Circle().fill(.red).frame(width: 8, height: 8)
                             Text("Stopped")
                                 .foregroundStyle(.secondary)
@@ -33,27 +28,24 @@ struct GeneralView: View {
                 }
 
                 Toggle("Enabled", isOn: Binding(
-                    get: { daemon.registrationStatus == .enabled },
+                    get: { pm.isRunning },
                     set: { newValue in
-                        Task {
-                            if newValue {
-                                await daemon.enable()
-                            } else {
-                                await daemon.disable()
-                            }
+                        if newValue {
+                            pm.start()
+                        } else {
+                            pm.stop()
                         }
                     }
                 ))
-                .disabled(daemon.isTransitioning)
 
-                if let error = daemon.errorMessage {
+                if let error = pm.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .font(.caption)
                 }
             }
 
-            if daemon.isReachable {
+            if pm.isReachable {
                 Section("Providers") {
                     if providers.isEmpty {
                         Text("No providers configured")
@@ -66,21 +58,12 @@ struct GeneralView: View {
                 }
             }
 
-            if daemon.isReachable || daemon.statusSummary == .registered {
-                DaemonLogView()
-            }
+            LogSection()
         }
         .formStyle(.grouped)
         .navigationTitle("General")
-        .onAppear {
-            daemon.refresh()
-            daemon.startMonitoring()
-            startPolling()
-        }
-        .onDisappear {
-            daemon.stopMonitoring()
-            pollTask?.cancel()
-        }
+        .onAppear { startPolling() }
+        .onDisappear { pollTask?.cancel() }
     }
 
     private func startPolling() {
@@ -91,7 +74,7 @@ struct GeneralView: View {
                 transport: URLSessionTransport()
             )
             while !Task.isCancelled {
-                if daemon.isReachable {
+                if pm.isReachable {
                     do {
                         let response = try await client.status_handler()
                         let status = try response.ok.body.json
@@ -151,6 +134,65 @@ private struct ProviderRow: View {
     }
 }
 
+/// Inline log section that reads from ProcessManager.logs.
+private struct LogSection: View {
+    @Environment(ProcessManager.self) private var pm
+
+    var body: some View {
+        Section("Log") {
+            VStack(spacing: 0) {
+                logContent
+                    .frame(height: 48)
+
+                Divider()
+
+                HStack(spacing: 12) {
+                    Text("\(pm.logs.count) lines")
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                    Spacer()
+                    Button("Clear", systemImage: "trash") {
+                        pm.clearLogs()
+                    }
+                    .buttonStyle(.borderless)
+                    .labelStyle(.iconOnly)
+                }
+                .font(.caption2)
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private var logContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                if pm.logs.isEmpty {
+                    Text("Waiting for log entries…")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(pm.logs.enumerated()), id: \.offset) { index, line in
+                            Text(line)
+                                .font(.system(size: 11, design: .monospaced))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .id(index)
+                        }
+                    }
+                }
+            }
+            .onChange(of: pm.logs.count) {
+                proxy.scrollTo(pm.logs.count - 1, anchor: .bottom)
+            }
+        }
+    }
+}
+
 #Preview {
     GeneralView()
+        .environment(ProcessManager())
 }
