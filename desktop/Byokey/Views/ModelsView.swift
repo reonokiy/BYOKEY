@@ -45,10 +45,23 @@ struct ModelsView: View {
                             }
                         }
                     } else {
+                        summarySection
+
                         ForEach(grouped, id: \.provider) { group in
-                            Section(group.provider) {
+                            Section {
                                 ForEach(group.models) { model in
                                     modelRow(model)
+                                }
+                            } header: {
+                                HStack {
+                                    Circle()
+                                        .fill(providerColor(group.provider))
+                                        .frame(width: 8, height: 8)
+                                    Text(group.provider)
+                                    Spacer()
+                                    Text("\(group.models.count)")
+                                        .foregroundStyle(.tertiary)
+                                        .monospacedDigit()
                                 }
                             }
                         }
@@ -73,12 +86,60 @@ struct ModelsView: View {
         .navigationTitle("Models")
     }
 
+    // MARK: - Summary
+
+    private var summarySection: some View {
+        Section {
+            HStack(spacing: 16) {
+                LabeledContent("Total") {
+                    Text("\(dataService.models.count)")
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                }
+
+                Divider().frame(height: 16)
+
+                LabeledContent("Providers") {
+                    Text("\(grouped.count)")
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                }
+
+                Divider().frame(height: 16)
+
+                HStack(spacing: 4) {
+                    ForEach(grouped.prefix(6), id: \.provider) { group in
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(providerColor(group.provider))
+                                .frame(width: 6, height: 6)
+                            Text("\(group.models.count)")
+                                .monospacedDigit()
+                        }
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Row
+
     private func modelRow(_ model: ModelEntry) -> some View {
         HStack {
             Text(model.id)
                 .fontDesign(.monospaced)
+                .lineLimit(1)
 
             Spacer()
+
+            if let usage = dataService.usage?.models[model.id] {
+                Text("\(usage.requests) req")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
 
             Button {
                 NSPasteboard.general.clearContents()
@@ -94,6 +155,25 @@ struct ModelsView: View {
             }
             .buttonStyle(.borderless)
             .help("Copy model ID")
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func providerColor(_ provider: String) -> Color {
+        switch provider.lowercased() {
+        case let p where p.contains("claude"), let p where p.contains("anthropic"):
+            return .orange
+        case let p where p.contains("openai"), let p where p.contains("codex"):
+            return .green
+        case let p where p.contains("copilot"), let p where p.contains("github"):
+            return .purple
+        case let p where p.contains("gemini"), let p where p.contains("google"):
+            return .blue
+        case let p where p.contains("kiro"), let p where p.contains("amazon"):
+            return .yellow
+        default:
+            return .gray
         }
     }
 }
