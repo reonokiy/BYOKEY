@@ -12,7 +12,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(
     name = "byokey",
-    about = "byokey — Bring Your Own Keys AI proxy",
+    about = "BYOKEY — Bring Your Own Keys AI proxy",
     version
 )]
 struct Cli {
