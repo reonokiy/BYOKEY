@@ -132,11 +132,9 @@ impl ProviderExecutor for CodexWsExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> CodexWsExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
+        let (_client, auth) = crate::http_util::test_auth();
         CodexWsExecutor::new(auth)
     }
 

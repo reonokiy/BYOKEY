@@ -42,17 +42,7 @@ const GEMINI_MODELS_BASE: &str = "https://generativelanguage.googleapis.com/v1be
 /// `ampcode.com` backend base URL for management route proxying.
 const AMP_BACKEND: &str = "https://ampcode.com";
 
-/// Hop-by-hop headers that must not be forwarded.
-const HOP_BY_HOP: &[&str] = &[
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-];
+use super::{CLIENT_AUTH_HEADERS, FINGERPRINT_HEADERS, HOP_BY_HOP};
 
 /// Handles `POST /api/provider/openai/v1/responses`.
 ///
@@ -383,20 +373,6 @@ fn byte_stream_to_gemini_sse(
         futures_util::stream::iter(output)
     })
 }
-
-/// 共享代理模式下需要从客户端请求中剥离的认证头。
-const CLIENT_AUTH_HEADERS: &[&str] = &["authorization", "x-api-key", "x-goog-api-key"];
-
-/// Headers that can fingerprint or reveal the client's network identity.
-const FINGERPRINT_HEADERS: &[&str] = &[
-    "x-forwarded-for",
-    "x-forwarded-host",
-    "x-forwarded-proto",
-    "x-real-ip",
-    "forwarded",
-    "via",
-    "priority",
-];
 
 /// Handles `ANY /api/{*path}` — forwards non-provider `ampcode.com` management
 /// routes (auth, threads, telemetry, etc.) transparently to the upstream.

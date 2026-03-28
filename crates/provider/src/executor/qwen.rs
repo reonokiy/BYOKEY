@@ -40,11 +40,12 @@ impl QwenExecutor {
 
     /// Returns the Bearer token: API key if configured, otherwise OAuth access token.
     async fn bearer_token(&self) -> Result<String> {
-        if let Some(key) = &self.api_key {
-            return Ok(key.clone());
-        }
-        let token = self.auth.get_token(&ProviderId::Qwen).await?;
-        Ok(token.access_token)
+        crate::http_util::resolve_bearer_token(
+            self.api_key.as_deref(),
+            &self.auth,
+            &ProviderId::Qwen,
+        )
+        .await
     }
 }
 
@@ -54,13 +55,12 @@ impl ProviderExecutor for QwenExecutor {
         let stream = request.stream;
         let mut body = request.into_body();
 
-        if stream {
-            body["stream_options"] = serde_json::json!({ "include_usage": true });
-        }
+        crate::http_util::ensure_stream_options(&mut body, stream);
 
         let token = self.bearer_token().await?;
+        let accept = crate::http_util::accept_for_stream(stream);
 
-        let mut builder = self
+        let builder = self
             .ph
             .client()
             .post(API_URL)
@@ -76,13 +76,8 @@ impl ProviderExecutor for QwenExecutor {
             .header("x-dashscope-cachecontrol", "enable")
             .header("x-stainless-retry-count", "0")
             .header("x-stainless-os", "MacOS")
-            .header("x-stainless-runtime", "node");
-
-        if stream {
-            builder = builder.header("accept", "text/event-stream");
-        } else {
-            builder = builder.header("accept", "application/json");
-        }
+            .header("x-stainless-runtime", "node")
+            .header("accept", accept);
 
         self.ph.send_passthrough(builder.json(&body), stream).await
     }
@@ -95,12 +90,10 @@ impl ProviderExecutor for QwenExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> QwenExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        QwenExecutor::new(Client::new(), None, auth, None)
+        let (client, auth) = crate::http_util::test_auth();
+        QwenExecutor::new(client, None, auth, None)
     }
 
     #[test]

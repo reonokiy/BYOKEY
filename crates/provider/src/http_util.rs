@@ -189,6 +189,59 @@ fn parse_retry_after_body(body: &str, status: u16) -> Option<std::time::Duration
     None
 }
 
+/// Returns the appropriate `Accept` header value for a request.
+///
+/// Streaming requests need `text/event-stream`; non-streaming need `application/json`.
+#[must_use]
+pub fn accept_for_stream(stream: bool) -> &'static str {
+    if stream {
+        "text/event-stream"
+    } else {
+        "application/json"
+    }
+}
+
+/// Injects `stream_options: { include_usage: true }` into the body when streaming.
+///
+/// Used by OpenAI-passthrough providers (Kimi, Qwen, iFlow, Copilot, Gemini).
+pub fn ensure_stream_options(body: &mut serde_json::Value, stream: bool) {
+    if stream {
+        body["stream_options"] = serde_json::json!({ "include_usage": true });
+    }
+}
+
+/// Resolves a bearer token: returns the API key if present, otherwise fetches
+/// an OAuth token from the [`AuthManager`](byokey_auth::AuthManager).
+///
+/// This is the common pattern used by most providers (Kimi, Qwen, iFlow,
+/// Antigravity, Kiro).
+///
+/// # Errors
+///
+/// Returns an error if the OAuth token fetch fails.
+pub async fn resolve_bearer_token(
+    api_key: Option<&str>,
+    auth: &byokey_auth::AuthManager,
+    provider: &ProviderId,
+) -> byokey_types::traits::Result<String> {
+    if let Some(key) = api_key {
+        return Ok(key.to_string());
+    }
+    let token = auth.get_token(provider).await?;
+    Ok(token.access_token)
+}
+
+/// Creates a test `AuthManager` and HTTP client pair for executor unit tests.
+///
+/// Returns `(rquest::Client, Arc<AuthManager>)` backed by an in-memory token store.
+#[cfg(test)]
+#[must_use]
+pub fn test_auth() -> (Client, Arc<byokey_auth::AuthManager>) {
+    let store = Arc::new(byokey_store::InMemoryTokenStore::new());
+    let auth = Arc::new(byokey_auth::AuthManager::new(store, Client::new()));
+    (Client::new(), auth)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

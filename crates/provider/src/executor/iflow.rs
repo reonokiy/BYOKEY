@@ -43,11 +43,12 @@ impl IFlowExecutor {
 
     /// Resolves the API key: config-provided key first, otherwise from the auth store.
     async fn resolve_api_key(&self) -> Result<String> {
-        if let Some(key) = &self.api_key {
-            return Ok(key.clone());
-        }
-        let token = self.auth.get_token(&ProviderId::IFlow).await?;
-        Ok(token.access_token)
+        crate::http_util::resolve_bearer_token(
+            self.api_key.as_deref(),
+            &self.auth,
+            &ProviderId::IFlow,
+        )
+        .await
     }
 }
 
@@ -67,9 +68,7 @@ impl ProviderExecutor for IFlowExecutor {
     async fn chat_completion(&self, request: ChatRequest) -> Result<ProviderResponse> {
         let stream = request.stream;
         let mut body = request.into_body();
-        if stream {
-            body["stream_options"] = serde_json::json!({ "include_usage": true });
-        }
+        crate::http_util::ensure_stream_options(&mut body, stream);
 
         let api_key = self.resolve_api_key().await?;
 
@@ -81,12 +80,7 @@ impl ProviderExecutor for IFlowExecutor {
             .try_into()
             .unwrap_or(u64::MAX);
         let signature = create_signature(&api_key, &session_id, timestamp);
-
-        let accept = if stream {
-            "text/event-stream"
-        } else {
-            "application/json"
-        };
+        let accept = crate::http_util::accept_for_stream(stream);
 
         let builder = self
             .ph
@@ -112,12 +106,10 @@ impl ProviderExecutor for IFlowExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> IFlowExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        IFlowExecutor::new(Client::new(), None, auth, None)
+        let (client, auth) = crate::http_util::test_auth();
+        IFlowExecutor::new(client, None, auth, None)
     }
 
     #[test]

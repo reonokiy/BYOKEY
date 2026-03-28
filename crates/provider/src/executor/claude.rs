@@ -407,12 +407,10 @@ pub(crate) fn translate_claude_sse(inner: ByteStream) -> ByteStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> ClaudeExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        ClaudeExecutor::new(Client::new(), None, auth, None, None, None)
+        let (client, auth) = crate::http_util::test_auth();
+        ClaudeExecutor::new(client, None, auth, None, None, None)
     }
 
     #[test]
@@ -425,16 +423,8 @@ mod tests {
 
     #[test]
     fn test_supported_models_with_api_key() {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        let ex = ClaudeExecutor::new(
-            Client::new(),
-            Some("sk-ant-test".into()),
-            auth,
-            None,
-            None,
-            None,
-        );
+        let (client, auth) = crate::http_util::test_auth();
+        let ex = ClaudeExecutor::new(client, Some("sk-ant-test".into()), auth, None, None, None);
         assert!(!ex.supported_models().is_empty());
     }
 }

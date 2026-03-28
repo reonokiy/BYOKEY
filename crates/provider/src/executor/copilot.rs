@@ -462,9 +462,7 @@ impl ProviderExecutor for CopilotExecutor {
         let stream = request.stream;
         let initiator = Self::initiator(&request);
         let mut body = request.into_body();
-        if stream {
-            body["stream_options"] = serde_json::json!({ "include_usage": true });
-        }
+        crate::http_util::ensure_stream_options(&mut body, stream);
 
         let accounts = self
             .auth
@@ -532,13 +530,10 @@ impl ProviderExecutor for CopilotExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
-    use rquest::Client;
 
     fn make_executor() -> CopilotExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        CopilotExecutor::new(Client::new(), None, auth, None)
+        let (client, auth) = crate::http_util::test_auth();
+        CopilotExecutor::new(client, None, auth, None)
     }
 
     #[test]

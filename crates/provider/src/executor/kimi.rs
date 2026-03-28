@@ -49,11 +49,12 @@ impl KimiExecutor {
 
     /// Returns the Bearer token: API key if configured, otherwise OAuth access token.
     async fn bearer_token(&self) -> Result<String> {
-        if let Some(key) = &self.api_key {
-            return Ok(key.clone());
-        }
-        let token = self.auth.get_token(&ProviderId::Kimi).await?;
-        Ok(token.access_token)
+        crate::http_util::resolve_bearer_token(
+            self.api_key.as_deref(),
+            &self.auth,
+            &ProviderId::Kimi,
+        )
+        .await
     }
 }
 
@@ -68,9 +69,7 @@ impl ProviderExecutor for KimiExecutor {
         let stream = request.stream;
         let mut body = request.into_body();
 
-        if stream {
-            body["stream_options"] = serde_json::json!({ "include_usage": true });
-        }
+        crate::http_util::ensure_stream_options(&mut body, stream);
 
         // Strip kimi- prefix for upstream API
         if let Some(model) = body.get("model").and_then(Value::as_str).map(String::from) {
@@ -78,12 +77,7 @@ impl ProviderExecutor for KimiExecutor {
         }
 
         let token = self.bearer_token().await?;
-
-        let accept = if stream {
-            "text/event-stream"
-        } else {
-            "application/json"
-        };
+        let accept = crate::http_util::accept_for_stream(stream);
 
         let builder = self
             .ph
@@ -117,12 +111,10 @@ impl ProviderExecutor for KimiExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> KimiExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        KimiExecutor::new(Client::new(), None, auth, None)
+        let (client, auth) = crate::http_util::test_auth();
+        KimiExecutor::new(client, None, auth, None)
     }
 
     #[test]

@@ -45,11 +45,12 @@ impl KiroExecutor {
 
     /// Returns the bearer token: API key if present, otherwise fetches an OAuth token.
     async fn bearer_token(&self) -> Result<String> {
-        if let Some(key) = &self.api_key {
-            return Ok(key.clone());
-        }
-        let token = self.auth.get_token(&ProviderId::Kiro).await?;
-        Ok(token.access_token)
+        crate::http_util::resolve_bearer_token(
+            self.api_key.as_deref(),
+            &self.auth,
+            &ProviderId::Kiro,
+        )
+        .await
     }
 }
 
@@ -91,12 +92,10 @@ impl ProviderExecutor for KiroExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> KiroExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        KiroExecutor::new(Client::new(), None, auth, None)
+        let (client, auth) = crate::http_util::test_auth();
+        KiroExecutor::new(client, None, auth, None)
     }
 
     #[test]

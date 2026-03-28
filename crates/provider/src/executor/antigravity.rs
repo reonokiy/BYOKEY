@@ -51,11 +51,12 @@ impl AntigravityExecutor {
 
     /// Returns the bearer token: API key if present, otherwise fetches an OAuth token.
     async fn bearer_token(&self) -> Result<String> {
-        if let Some(key) = &self.api_key {
-            return Ok(key.clone());
-        }
-        let token = self.auth.get_token(&ProviderId::Antigravity).await?;
-        Ok(token.access_token)
+        crate::http_util::resolve_bearer_token(
+            self.api_key.as_deref(),
+            &self.auth,
+            &ProviderId::Antigravity,
+        )
+        .await
     }
 
     /// Sends the request to the primary URL, falling back to the sandbox on failure or 429.
@@ -66,41 +67,29 @@ impl AntigravityExecutor {
         body: &Value,
         stream: bool,
     ) -> Result<rquest::Response> {
-        let accept = if stream {
-            "text/event-stream"
-        } else {
-            "application/json"
+        let accept = crate::http_util::accept_for_stream(stream);
+        let auth_value = format!("Bearer {token}");
+
+        let build_request = |base_url: &str| {
+            let url = format!("{base_url}{path}");
+            self.ph
+                .client()
+                .post(url)
+                .header("authorization", &auth_value)
+                .header("user-agent", "antigravity/1.104.0 darwin/arm64")
+                .header("content-type", "application/json")
+                .header("accept", accept)
+                .json(body)
         };
 
-        let primary = format!("{PRIMARY_URL}{path}");
-        let result = self
-            .ph
-            .client()
-            .post(&primary)
-            .header("authorization", format!("Bearer {token}"))
-            .header("user-agent", "antigravity/1.104.0 darwin/arm64")
-            .header("content-type", "application/json")
-            .header("accept", accept)
-            .json(body)
-            .send()
-            .await;
+        let result = build_request(PRIMARY_URL).send().await;
 
         match result {
             Ok(r) if r.status().as_u16() != 429 => Ok(r),
-            _ => {
-                let fallback = format!("{FALLBACK_URL}{path}");
-                self.ph
-                    .client()
-                    .post(&fallback)
-                    .header("authorization", format!("Bearer {token}"))
-                    .header("user-agent", "antigravity/1.104.0 darwin/arm64")
-                    .header("content-type", "application/json")
-                    .header("accept", accept)
-                    .json(body)
-                    .send()
-                    .await
-                    .map_err(ByokError::from)
-            }
+            _ => build_request(FALLBACK_URL)
+                .send()
+                .await
+                .map_err(ByokError::from),
         }
     }
 }
@@ -325,12 +314,10 @@ impl ProviderExecutor for AntigravityExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> AntigravityExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        AntigravityExecutor::new(Client::new(), None, auth, None)
+        let (client, auth) = crate::http_util::test_auth();
+        AntigravityExecutor::new(client, None, auth, None)
     }
 
     #[test]

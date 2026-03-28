@@ -144,19 +144,7 @@ fn prompt_cache_key(api_key: &str) -> String {
 
 /// Generates a random UUID v4 string.
 fn random_uuid() -> String {
-    use rand::Rng as _;
-    let mut rng = rand::thread_rng();
-    let bytes: [u8; 16] = rng.r#gen();
-    format!(
-        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
-        u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
-        u16::from_be_bytes([bytes[4], bytes[5]]),
-        u16::from_be_bytes([bytes[6], bytes[7]]) & 0x0fff,
-        (u16::from_be_bytes([bytes[8], bytes[9]]) & 0x3fff) | 0x8000,
-        u64::from_be_bytes([
-            bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15], 0, 0
-        ]) >> 16,
-    )
+    uuid::Uuid::new_v4().to_string()
 }
 
 /// Wraps a raw Codex SSE `ByteStream` and translates its events to
@@ -357,12 +345,10 @@ impl ProviderExecutor for CodexExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> CodexExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        CodexExecutor::new(Client::new(), None, auth, None)
+        let (client, auth) = crate::http_util::test_auth();
+        CodexExecutor::new(client, None, auth, None)
     }
 
     #[test]

@@ -15,34 +15,10 @@ use std::sync::Arc;
 
 use crate::AppState;
 
+use super::{CLIENT_AUTH_HEADERS, FINGERPRINT_HEADERS, HOP_BY_HOP};
+
 /// Amp backend base URL.
 const AMP_BACKEND: &str = "https://ampcode.com";
-
-/// Headers that must not be forwarded (hop-by-hop).
-const HOP_BY_HOP: &[&str] = &[
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-];
-
-/// 共享代理模式下需要从客户端请求中剥离的认证头。
-const CLIENT_AUTH_HEADERS: &[&str] = &["authorization", "x-api-key", "x-goog-api-key"];
-
-/// Headers that can fingerprint or reveal the client's network identity.
-const FINGERPRINT_HEADERS: &[&str] = &[
-    "x-forwarded-for",
-    "x-forwarded-host",
-    "x-forwarded-proto",
-    "x-real-ip",
-    "forwarded",
-    "via",
-    "priority",
-];
 
 /// Redirects Amp CLI to the web login page.
 pub async fn login_redirect() -> impl IntoResponse {

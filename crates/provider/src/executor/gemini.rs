@@ -53,9 +53,7 @@ impl ProviderExecutor for GeminiExecutor {
         let stream = request.stream;
         let mut body = request.into_body();
         body["stream"] = serde_json::Value::Bool(stream);
-        if stream {
-            body["stream_options"] = serde_json::json!({ "include_usage": true });
-        }
+        crate::http_util::ensure_stream_options(&mut body, stream);
 
         let (header_name, header_value) = self.auth_header().await?;
 
@@ -78,12 +76,10 @@ impl ProviderExecutor for GeminiExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byokey_store::InMemoryTokenStore;
 
     fn make_executor() -> GeminiExecutor {
-        let store = Arc::new(InMemoryTokenStore::new());
-        let auth = Arc::new(AuthManager::new(store, rquest::Client::new()));
-        GeminiExecutor::new(Client::new(), None, auth, None)
+        let (client, auth) = crate::http_util::test_auth();
+        GeminiExecutor::new(client, None, auth, None)
     }
 
     #[test]
