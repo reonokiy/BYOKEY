@@ -43,7 +43,7 @@ pub fn token_form_params<'a>(
 // ── AuthCodeFlow implementation ───────────────────────────────────────────────
 
 use async_trait::async_trait;
-use byokey_types::{ByokError, OAuthToken, ProviderId, traits::Result};
+use byokey_types::{ByokError, OAuthToken, ProviderId, Result};
 
 use crate::credentials::OAuthCredentials;
 use crate::flow::auth_code::{self, AuthCodeFlow};

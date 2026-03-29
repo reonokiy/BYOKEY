@@ -3,7 +3,7 @@
 //! Requires additional `X-Msh-*` request headers for platform information.
 
 use async_trait::async_trait;
-use byokey_types::{ByokError, ProviderId, traits::Result};
+use byokey_types::{ByokError, ProviderId, Result};
 use rand::RngCore as _;
 
 use crate::token::DeviceCodeResponse;
@@ -81,31 +81,13 @@ pub fn build_token_poll_params(client_id: &str, device_code: &str) -> Vec<(Strin
 ///
 /// Returns an error if the response is missing required fields (`device_code`, `user_code`, or `verification_uri`).
 pub fn parse_device_code_response(json: &serde_json::Value) -> Result<DeviceCodeResponse> {
-    Ok(DeviceCodeResponse {
-        device_code: json
-            .get("device_code")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| ByokError::Auth("missing device_code".into()))?
-            .to_string(),
-        user_code: json
-            .get("user_code")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| ByokError::Auth("missing user_code".into()))?
-            .to_string(),
-        verification_uri: json
-            .get("verification_uri")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| ByokError::Auth("missing verification_uri".into()))?
-            .to_string(),
-        expires_in: json
-            .get("expires_in")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(600),
-        interval: json
-            .get("interval")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(5),
-    })
+    crate::token::parse_device_code_json(
+        json,
+        &crate::token::DeviceCodeParseConfig {
+            verification_uri_fallback: None,
+            default_expires_in: 600,
+        },
+    )
 }
 
 // ── DeviceCodeFlow implementation ─────────────────────────────────────────────

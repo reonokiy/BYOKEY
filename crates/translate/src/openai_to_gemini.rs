@@ -1,6 +1,6 @@
 //! Translates `OpenAI` chat completion requests into Gemini `generateContent` format.
 
-use byokey_types::{ByokError, RequestTranslator, traits::Result};
+use byokey_types::{ByokError, RequestTranslator, Result};
 use serde_json::{Value, json};
 
 use crate::merge_messages::merge_adjacent_messages;

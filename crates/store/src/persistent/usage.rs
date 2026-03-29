@@ -1,7 +1,7 @@
 //! [`UsageStore`] implementation for [`SqliteTokenStore`].
 
 use async_trait::async_trait;
-use byokey_types::{UsageBucket, UsageRecord, UsageStore, traits::Result};
+use byokey_types::{Result, UsageBucket, UsageRecord, UsageStore};
 use sea_orm::{ConnectionTrait, Statement};
 
 use super::{SqliteTokenStore, now_unix};

@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use byokey_types::{ByokError, OAuthToken, ProviderId, traits::Result};
+use byokey_types::{ByokError, OAuthToken, ProviderId, Result};
 
 /// Local callback port for the OAuth redirect.
 pub const CALLBACK_PORT: u16 = 11451;

@@ -3,7 +3,7 @@
 //! Supports multi-account storage with `(ProviderId, account_id)` composite keys.
 
 use async_trait::async_trait;
-use byokey_types::{AccountInfo, OAuthToken, ProviderId, TokenStore, traits::Result};
+use byokey_types::{AccountInfo, OAuthToken, ProviderId, Result, TokenStore};
 use std::collections::HashMap;
 use std::sync::Mutex;
 

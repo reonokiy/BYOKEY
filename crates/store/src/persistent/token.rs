@@ -1,8 +1,8 @@
 //! [`TokenStore`] implementation for [`SqliteTokenStore`].
 
 use async_trait::async_trait;
-use byokey_types::{AccountInfo, ByokError, OAuthToken, ProviderId, TokenStore, traits::Result};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use byokey_types::{AccountInfo, ByokError, OAuthToken, ProviderId, Result, TokenStore};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, TransactionTrait};
 
 use super::{SqliteTokenStore, db_exec_raw, now_unix};
 use crate::entity::account;
@@ -185,21 +185,24 @@ impl TokenStore for SqliteTokenStore {
             )));
         }
 
-        // Deactivate all accounts for this provider.
+        // Use a transaction to atomically switch the active account.
+        let txn = self.db.begin().await?;
+
         db_exec_raw(
-            &self.db,
+            &txn,
             "UPDATE accounts SET is_active = 0 WHERE provider = ?",
             vec![key.clone().into()],
         )
         .await?;
 
-        // Activate the target.
         db_exec_raw(
-            &self.db,
+            &txn,
             "UPDATE accounts SET is_active = 1 WHERE provider = ? AND account_id = ?",
             vec![key.clone().into(), account_id.to_string().into()],
         )
         .await?;
+
+        txn.commit().await?;
 
         self.cache.lock().unwrap().remove(&key);
         Ok(())

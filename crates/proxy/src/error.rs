@@ -30,6 +30,11 @@ impl ApiError {
                 "invalid_request_error",
                 "model_not_found",
             ),
+            ByokError::UnsupportedProvider(_) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_request_error",
+                "provider_not_found",
+            ),
             ByokError::Translation(_) => (
                 StatusCode::BAD_REQUEST,
                 "invalid_request_error",

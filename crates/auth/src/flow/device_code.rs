@@ -4,7 +4,7 @@
 //! and a generic [`run`] function that orchestrates the common polling loop.
 
 use async_trait::async_trait;
-use byokey_types::{ByokError, OAuthToken, ProviderId, traits::Result};
+use byokey_types::{ByokError, OAuthToken, ProviderId, Result};
 use std::time::Duration;
 
 use super::{open_browser, save_login_token};

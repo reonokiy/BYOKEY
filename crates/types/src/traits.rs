@@ -3,15 +3,13 @@
 //! Every cross-crate abstraction is defined here so that higher layers depend
 //! only on `byokey-types`, not on each other.
 
+pub use crate::error::Result;
 use crate::{AccountInfo, ByokError, ChatRequest, OAuthToken, ProviderId};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_core::Stream;
 use serde_json::Value;
 use std::pin::Pin;
-
-/// Convenience alias used throughout the workspace.
-pub type Result<T> = std::result::Result<T, ByokError>;
 
 /// A pinned, sendable stream of SSE byte chunks.
 pub type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;

@@ -4,7 +4,7 @@
 //! Callback port: 9876.
 
 use crate::token::DeviceCodeResponse;
-use byokey_types::{ByokError, traits::Result};
+use byokey_types::Result;
 
 pub const CALLBACK_PORT: u16 = 9876;
 pub const AUTH_HOST: &str = "prod.us-east-1.auth.desktop.kiro.dev";
@@ -13,31 +13,13 @@ pub const AUTH_HOST: &str = "prod.us-east-1.auth.desktop.kiro.dev";
 ///
 /// Returns an error if the response is missing required fields (`device_code` or `user_code`).
 pub fn parse_device_code_response(json: &serde_json::Value) -> Result<DeviceCodeResponse> {
-    Ok(DeviceCodeResponse {
-        device_code: json
-            .get("device_code")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| ByokError::Auth("missing device_code".into()))?
-            .to_string(),
-        user_code: json
-            .get("user_code")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| ByokError::Auth("missing user_code".into()))?
-            .to_string(),
-        verification_uri: json
-            .get("verification_uri")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("")
-            .to_string(),
-        expires_in: json
-            .get("expires_in")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(300),
-        interval: json
-            .get("interval")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(5),
-    })
+    crate::token::parse_device_code_json(
+        json,
+        &crate::token::DeviceCodeParseConfig {
+            verification_uri_fallback: Some(""),
+            default_expires_in: 300,
+        },
+    )
 }
 
 #[cfg(test)]

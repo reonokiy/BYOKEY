@@ -41,7 +41,7 @@ impl std::str::FromStr for ProviderId {
     ///
     /// # Errors
     ///
-    /// Returns [`ByokError::UnsupportedModel`] if the string does not match
+    /// Returns [`ByokError::UnsupportedProvider`] if the string does not match
     /// any known provider name or alias.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -54,7 +54,7 @@ impl std::str::FromStr for ProviderId {
             "qwen" | "alibaba" => Ok(Self::Qwen),
             "kimi" | "moonshot" => Ok(Self::Kimi),
             "iflow" | "zai" | "glm" => Ok(Self::IFlow),
-            other => Err(crate::ByokError::UnsupportedModel(other.to_string())),
+            other => Err(crate::ByokError::UnsupportedProvider(other.to_string())),
         }
     }
 }
@@ -102,15 +102,6 @@ pub enum ThinkingCapability {
     LevelOnly,
     /// Both budgets and levels (e.g. Claude 4.6 adaptive).
     Hybrid,
-}
-
-/// The wire protocol format used by a provider's native API.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProtocolFormat {
-    OpenAI,
-    Anthropic,
-    Gemini,
 }
 
 #[cfg(test)]
@@ -169,6 +160,7 @@ mod tests {
     fn test_from_str_unknown() {
         let err = ProviderId::from_str("xyz").unwrap_err();
         assert!(err.to_string().contains("xyz"));
+        assert!(matches!(err, crate::ByokError::UnsupportedProvider(_)));
     }
 
     #[test]
@@ -196,12 +188,5 @@ mod tests {
         let mut map = HashMap::new();
         map.insert(ProviderId::Claude, "val");
         assert_eq!(map[&ProviderId::Claude], "val");
-    }
-
-    #[test]
-    fn test_protocol_format_serde() {
-        let j = serde_json::to_string(&ProtocolFormat::OpenAI).unwrap();
-        let back: ProtocolFormat = serde_json::from_str(&j).unwrap();
-        assert_eq!(back, ProtocolFormat::OpenAI);
     }
 }

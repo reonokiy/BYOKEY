@@ -223,7 +223,7 @@ pub async fn resolve_bearer_token(
     api_key: Option<&str>,
     auth: &Arc<byokey_auth::AuthManager>,
     provider: &ProviderId,
-) -> byokey_types::traits::Result<String> {
+) -> byokey_types::Result<String> {
     if let Some(key) = api_key {
         return Ok(key.to_string());
     }

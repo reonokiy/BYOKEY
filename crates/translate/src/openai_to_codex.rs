@@ -7,7 +7,7 @@
 //! - `system` role → top-level `instructions` field
 //! - `max_tokens` is intentionally dropped (unsupported on `ChatGPT` OAuth sessions)
 
-use byokey_types::{ByokError, RequestTranslator, traits::Result};
+use byokey_types::{ByokError, RequestTranslator, Result};
 use serde_json::{Value, json};
 
 /// Translator from `OpenAI` chat completion request format to Codex Responses API format.

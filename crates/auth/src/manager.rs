@@ -6,7 +6,7 @@
 //! - Cooldown duration to prevent excessive refresh attempts (30 s).
 //! - Multi-account support: save, switch, and list accounts per provider.
 use byokey_types::{
-    AccountInfo, ByokError, OAuthToken, ProviderId, TokenState, TokenStore, traits::Result,
+    AccountInfo, ByokError, OAuthToken, ProviderId, Result, TokenState, TokenStore,
 };
 use std::{
     collections::HashMap,

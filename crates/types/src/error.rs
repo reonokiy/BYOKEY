@@ -46,6 +46,10 @@ pub enum ByokError {
     #[error("unsupported model: {0}")]
     UnsupportedModel(String),
 
+    /// The requested provider name is not recognized.
+    #[error("unsupported provider: {0}")]
+    UnsupportedProvider(String),
+
     /// The upstream provider returned a non-success status.
     #[error("upstream error: status={status}, body={body}")]
     Upstream {

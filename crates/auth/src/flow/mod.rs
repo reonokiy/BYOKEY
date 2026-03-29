@@ -7,7 +7,7 @@
 pub mod auth_code;
 pub mod device_code;
 
-use byokey_types::{ByokError, OAuthToken, ProviderId, traits::Result};
+use byokey_types::{ByokError, OAuthToken, ProviderId, Result};
 
 use crate::AuthManager;
 use crate::provider::{antigravity, claude, codex, copilot, gemini, iflow, kimi, qwen};

@@ -4,7 +4,7 @@
 //! `response.completed` SSE event). This translator converts it to the standard
 //! `OpenAI` chat completion response format.
 
-use byokey_types::{ResponseTranslator, traits::Result};
+use byokey_types::{ResponseTranslator, Result};
 use serde_json::{Value, json};
 
 /// Translator from Codex Responses API `response` object to `OpenAI` chat completion format.

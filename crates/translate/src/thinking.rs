@@ -53,7 +53,7 @@ impl ThinkingExtractor {
 
     /// Injects a thinking budget into a Claude request body.
     ///
-    /// Applies a hard cap of 32,000 tokens and ensures `max_tokens` is large enough
+    /// Applies a hard cap of 128,000 tokens and ensures `max_tokens` is large enough
     /// to accommodate the thinking budget plus headroom.
     pub fn inject_thinking(mut req: Value, budget_tokens: u32) -> Value {
         const HARD_CAP: u32 = 128_000;

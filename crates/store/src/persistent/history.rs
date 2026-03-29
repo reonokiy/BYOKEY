@@ -1,9 +1,7 @@
 //! [`ChatHistoryStore`] implementation for [`SqliteTokenStore`].
 
 use async_trait::async_trait;
-use byokey_types::{
-    ByokError, ChatHistoryStore, ConversationSummary, MessageRecord, traits::Result,
-};
+use byokey_types::{ByokError, ChatHistoryStore, ConversationSummary, MessageRecord, Result};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
 };

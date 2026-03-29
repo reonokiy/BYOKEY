@@ -3,6 +3,13 @@
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO)
+        .as_secs()
+}
+
 /// An OAuth token with optional refresh capability and expiry tracking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthToken {
@@ -29,11 +36,7 @@ impl OAuthToken {
     /// Set the expiry to `expires_in_secs` seconds from now.
     #[must_use]
     pub fn with_expiry(mut self, expires_in_secs: u64) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or(Duration::ZERO)
-            .as_secs();
-        self.expires_at = Some(now + expires_in_secs);
+        self.expires_at = Some(unix_now() + expires_in_secs);
         self
     }
 
@@ -50,11 +53,7 @@ impl OAuthToken {
         let Some(expires_at) = self.expires_at else {
             return false;
         };
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or(Duration::ZERO)
-            .as_secs();
-        now + 60 >= expires_at
+        unix_now() + 60 >= expires_at
     }
 
     /// Return `true` if the token expires within 5 minutes but is not yet
@@ -66,10 +65,7 @@ impl OAuthToken {
         let Some(expires_at) = self.expires_at else {
             return false;
         };
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or(Duration::ZERO)
-            .as_secs();
+        let now = unix_now();
         // Within 5-min window but not yet in the 60s hard-expiry window
         now + 300 >= expires_at && now + 60 < expires_at
     }

@@ -204,7 +204,7 @@ impl SqliteTokenStore {
 
 /// Helper to execute a raw SQL statement with positional parameters.
 pub(crate) async fn db_exec_raw(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     sql: &str,
     values: Vec<sea_orm::Value>,
 ) -> std::result::Result<(), sea_orm::DbErr> {

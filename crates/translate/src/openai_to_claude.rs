@@ -1,6 +1,6 @@
 //! Translates `OpenAI` chat completion requests into Claude Messages API format.
 
-use byokey_types::{ByokError, RequestTranslator, traits::Result};
+use byokey_types::{ByokError, RequestTranslator, Result};
 use serde_json::{Value, json};
 
 /// Ensure a `tool_use` id conforms to Claude's `^[a-zA-Z0-9_-]+$` regex.

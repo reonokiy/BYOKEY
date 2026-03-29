@@ -5,7 +5,8 @@
 //! fetch credentials → PKCE → browser redirect → callback → code exchange → save.
 
 use async_trait::async_trait;
-use byokey_types::{ByokError, OAuthToken, ProviderId, traits::Result};
+use byokey_types::{ByokError, OAuthToken, ProviderId, Result};
+use serde_json::Value;
 
 use super::{open_browser, save_login_token};
 use crate::{AuthManager, callback, credentials::OAuthCredentials, pkce, token};
@@ -98,10 +99,26 @@ pub async fn run<P: AuthCodeFlow>(
 /// Returns an error if the response body cannot be parsed as JSON or is missing
 /// the `access_token` field.
 pub async fn send_and_parse_token(resp: rquest::Response) -> Result<OAuthToken> {
+    let status = resp.status();
     let json: serde_json::Value = resp
         .json()
         .await
         .map_err(|e| ByokError::Auth(format!("failed to parse token response: {e}")))?;
+
+    if !status.is_success() {
+        let error = json
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let description = json
+            .get("error_description")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        return Err(ByokError::Auth(format!(
+            "token exchange failed ({status}): {error}: {description}"
+        )));
+    }
+
     token::parse_token_response(&json)
 }
 
