@@ -23,7 +23,7 @@ pub use usage::{UsageRecorder, UsageStats};
 use arc_swap::ArcSwap;
 use byokey_auth::AuthManager;
 use byokey_provider::DeviceProfileCache;
-use byokey_types::{RateLimitStore, UsageStore};
+use byokey_types::{AmpQuotaStore, RateLimitStore, UsageStore};
 use std::sync::Arc;
 
 /// Shared application state passed to all route handlers.
@@ -41,6 +41,8 @@ pub struct AppState {
     pub ratelimits: Arc<RateLimitStore>,
     /// Per-auth device fingerprint cache for Claude API headers.
     pub device_profiles: Arc<DeviceProfileCache>,
+    /// Cached `AmpCode` quota data (free-tier status + balance).
+    pub amp_quota: Arc<AmpQuotaStore>,
 }
 
 impl AppState {
@@ -62,6 +64,7 @@ impl AppState {
             usage: Arc::new(UsageRecorder::new(usage_store)),
             ratelimits: Arc::new(RateLimitStore::new()),
             device_profiles: Arc::new(DeviceProfileCache::new()),
+            amp_quota: Arc::new(AmpQuotaStore::new()),
         })
     }
 }

@@ -701,6 +701,31 @@ pub async fn amp_management_proxy(
 
     let mut body_bytes = resp.bytes().await.unwrap_or_default();
 
+    // Cache AmpCode quota data from intercepted responses (before any rewriting).
+    if status.is_success()
+        && let Some(q) = query.as_deref()
+    {
+        if q.contains("getUserFreeTierStatus")
+            && let Ok(json) = serde_json::from_slice::<Value>(&body_bytes)
+            && let Some(result) = json.get("result")
+        {
+            let can_use = result
+                .get("canUseAmpFree")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let daily_grant = result
+                .get("isDailyGrantEnabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            state.amp_quota.update_free_tier(can_use, daily_grant);
+        } else if q.contains("userDisplayBalanceInfo")
+            && let Ok(json) = serde_json::from_slice::<Value>(&body_bytes)
+            && let Some(display_text) = json.pointer("/result/displayText").cloned()
+        {
+            state.amp_quota.update_balance(display_text);
+        }
+    }
+
     // Hide free-tier ads: rewrite getUserFreeTierStatus response when enabled.
     if config.amp.hide_free_tier
         && query

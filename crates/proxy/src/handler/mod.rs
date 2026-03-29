@@ -7,6 +7,7 @@
 pub mod accounts;
 pub(crate) mod amp;
 pub(crate) mod amp_provider;
+pub mod amp_quota;
 pub(crate) mod chat;
 pub(crate) mod messages;
 pub(crate) mod models;
