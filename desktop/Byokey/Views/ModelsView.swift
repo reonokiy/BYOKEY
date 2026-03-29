@@ -21,7 +21,26 @@ struct ModelsView: View {
     }
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Models")
+                    .font(.system(size: 28, weight: .bold))
+                Spacer()
+                if pm.isReachable {
+                    HStack(spacing: 4) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        TextField("Filter models…", text: $searchText)
+                            .textFieldStyle(.plain)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.white.opacity(0.6), in: .rect(cornerRadius: 8))
+                    .frame(maxWidth: 220)
+                }
+            }
+            .padding(.bottom, 8)
+
             if pm.isReachable {
                 Form {
                     if dataService.models.isEmpty, dataService.isLoading {
@@ -68,22 +87,24 @@ struct ModelsView: View {
                     }
                 }
                 .formStyle(.grouped)
-                .searchable(text: $searchText, prompt: "Filter models…")
+                .scrollContentBackground(.hidden)
             } else if pm.isRunning {
-                ContentUnavailableView {
-                    ProgressView().controlSize(.large)
-                } description: {
-                    Text("Waiting for server…")
-                }
+                Spacer()
+                HStack { Spacer(); ProgressView().controlSize(.large); Spacer() }
+                Text("Waiting for server…").foregroundStyle(.secondary)
+                Spacer()
             } else {
+                Spacer()
                 ContentUnavailableView(
                     "Server Not Running",
                     systemImage: "cpu",
                     description: Text("Enable the proxy server to browse models.")
                 )
+                Spacer()
             }
         }
-        .navigationTitle("Models")
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Summary
@@ -134,7 +155,7 @@ struct ModelsView: View {
 
             Spacer()
 
-            if let usage = dataService.usage?.models[model.id] {
+            if let usage = dataService.usage?.models.additionalProperties[model.id] {
                 Text("\(usage.requests) req")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)

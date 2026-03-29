@@ -2,15 +2,15 @@
 
 use axum::extract::DefaultBodyLimit;
 use axum::{
-    Json, Router,
-    extract::{Query, State},
+    Router,
     routing::{any, delete, get, post},
 };
-use serde::Deserialize;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
-use crate::handler::{accounts, amp, amp_provider, chat, messages, models, ratelimits, status};
+use crate::handler::{
+    accounts, amp, amp_provider, chat, messages, models, ratelimits, status, usage,
+};
 use crate::{AppState, openapi};
 
 /// Build the full axum router.
@@ -70,8 +70,11 @@ pub fn make_router(state: Arc<AppState>) -> Router {
         .route("/api/{*path}", any(amp_provider::amp_management_proxy))
         // Management API
         .route("/v0/management/status", get(status::status_handler))
-        .route("/v0/management/usage", get(usage_handler))
-        .route("/v0/management/usage/history", get(usage_history_handler))
+        .route("/v0/management/usage", get(usage::usage_handler))
+        .route(
+            "/v0/management/usage/history",
+            get(usage::usage_history_handler),
+        )
         .route("/v0/management/accounts", get(accounts::accounts_handler))
         .route(
             "/v0/management/accounts/{provider}/{account_id}",
@@ -89,59 +92,6 @@ pub fn make_router(state: Arc<AppState>) -> Router {
         .with_state(state)
         .layer(DefaultBodyLimit::max(200 * 1024 * 1024)) // 200 MB for image uploads
         .layer(TraceLayer::new_for_http())
-}
-
-async fn usage_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let snap = state.usage.snapshot();
-    Json(serde_json::to_value(snap).unwrap_or_default())
-}
-
-#[derive(Deserialize)]
-struct UsageHistoryQuery {
-    /// Start of the time range (unix timestamp). Defaults to 24 hours ago.
-    from: Option<i64>,
-    /// End of the time range (unix timestamp). Defaults to now.
-    to: Option<i64>,
-    /// Optional model name filter.
-    model: Option<String>,
-}
-
-async fn usage_history_handler(
-    State(state): State<Arc<AppState>>,
-    Query(q): Query<UsageHistoryQuery>,
-) -> Json<serde_json::Value> {
-    let Some(store) = state.usage.store() else {
-        return Json(serde_json::json!({ "error": "no persistent usage store configured" }));
-    };
-
-    #[allow(clippy::cast_possible_wrap)]
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
-
-    let to = q.to.unwrap_or(now);
-    let from = q.from.unwrap_or(to - 86400);
-
-    // Auto-select bucket size based on range.
-    let range = to - from;
-    let bucket_secs = if range <= 86400 {
-        3600 // hourly
-    } else if range <= 86400 * 7 {
-        21600 // 6-hour
-    } else {
-        86400 // daily
-    };
-
-    match store.query(from, to, q.model.as_deref(), bucket_secs).await {
-        Ok(buckets) => Json(serde_json::json!({
-            "from": from,
-            "to": to,
-            "bucket_seconds": bucket_secs,
-            "buckets": buckets,
-        })),
-        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
-    }
 }
 
 #[cfg(test)]

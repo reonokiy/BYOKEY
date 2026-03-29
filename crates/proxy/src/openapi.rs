@@ -9,6 +9,9 @@ use utoipa::OpenApi;
         crate::handler::accounts::remove_account_handler,
         crate::handler::accounts::activate_account_handler,
         crate::handler::ratelimits::ratelimits_handler,
+        crate::handler::usage::usage_handler,
+        crate::handler::usage::usage_history_handler,
+        crate::handler::models::list_models,
     ),
     components(schemas(
         crate::handler::status::StatusResponse,
@@ -23,6 +26,13 @@ use utoipa::OpenApi;
         crate::handler::ratelimits::ProviderRateLimits,
         crate::handler::ratelimits::AccountRateLimit,
         byokey_types::RateLimitSnapshot,
+        crate::usage::UsageSnapshot,
+        crate::usage::ModelStats,
+        crate::handler::usage::UsageHistoryQuery,
+        crate::handler::usage::UsageHistoryResponse,
+        byokey_types::UsageBucket,
+        crate::handler::models::ModelsResponse,
+        crate::handler::models::ModelEntry,
     )),
     tags((name = "management", description = "Daemon management API"))
 )]

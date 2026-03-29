@@ -26,6 +26,13 @@ final class DataService {
 
     private var pollTask: Task<Void, Never>?
 
+    private var client: Client {
+        Client(
+            serverURL: AppEnvironment.shared.baseURL,
+            transport: URLSessionTransport()
+        )
+    }
+
     // MARK: - Polling
 
     func startPolling() {
@@ -49,10 +56,6 @@ final class DataService {
     }
 
     func reloadAccounts() async {
-        let client = Client(
-            serverURL: AppEnvironment.shared.baseURL,
-            transport: URLSessionTransport()
-        )
         do {
             let response = try await client.accounts_handler()
             providerAccounts = try response.ok.body.json.providers
@@ -64,10 +67,6 @@ final class DataService {
     // MARK: - Mutations
 
     func activateAccount(provider: String, accountId: String) async throws {
-        let client = Client(
-            serverURL: AppEnvironment.shared.baseURL,
-            transport: URLSessionTransport()
-        )
         _ = try await client.activate_account_handler(
             path: .init(provider: provider, account_id: accountId)
         )
@@ -75,10 +74,6 @@ final class DataService {
     }
 
     func removeAccount(provider: String, accountId: String) async throws {
-        let client = Client(
-            serverURL: AppEnvironment.shared.baseURL,
-            transport: URLSessionTransport()
-        )
         _ = try await client.remove_account_handler(
             path: .init(provider: provider, account_id: accountId)
         )
@@ -90,9 +85,6 @@ final class DataService {
     private func fetchAll() async {
         isLoading = true
         defer { isLoading = false }
-
-        let baseURL = AppEnvironment.shared.baseURL
-        let client = Client(serverURL: baseURL, transport: URLSessionTransport())
 
         do {
             let resp = try await client.status_handler()
@@ -108,12 +100,36 @@ final class DataService {
             // keep existing
         }
 
-        usage = try? await APIClient.usage()
-        rateLimits = try? await APIClient.rateLimits()
-        models = (try? await APIClient.models())?.data ?? []
+        do {
+            let resp = try await client.usage_handler()
+            usage = try resp.ok.body.json
+        } catch {
+            usage = nil
+        }
+
+        do {
+            let resp = try await client.ratelimits_handler()
+            rateLimits = try resp.ok.body.json
+        } catch {
+            rateLimits = nil
+        }
+
+        do {
+            let resp = try await client.list_models()
+            models = try resp.ok.body.json.data
+        } catch {
+            models = []
+        }
 
         let now = Int64(Date().timeIntervalSince1970)
-        history = try? await APIClient.usageHistory(from: now - 86400, to: now)
+        do {
+            let resp = try await client.usage_history_handler(
+                .init(path: .init(from: now - 86400, to: now, model: ""))
+            )
+            history = try resp.ok.body.json
+        } catch {
+            history = nil
+        }
     }
 
     private func clearAll() {

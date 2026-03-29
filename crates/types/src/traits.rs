@@ -159,7 +159,7 @@ pub struct UsageRecord {
 }
 
 /// Time-bucketed usage aggregation result.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
 pub struct UsageBucket {
     pub period_start: i64,
     pub model: String,

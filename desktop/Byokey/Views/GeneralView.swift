@@ -5,9 +5,7 @@ struct GeneralView: View {
     @Environment(DataService.self) private var dataService
 
     var body: some View {
-        VStack(spacing: 16) {
-            DashboardStatusBar()
-
+        DetailPage("Activity") {
             if pm.isReachable {
                 if dataService.providers.isEmpty, dataService.isLoading {
                     loadingState
@@ -20,12 +18,25 @@ struct GeneralView: View {
 
                     if let rateLimits = dataService.rateLimits,
                        rateLimits.providers.contains(where: {
-                           $0.accounts.contains(where: { !$0.snapshot.headers.isEmpty })
+                           $0.accounts.contains(where: { !$0.snapshot.headers.additionalProperties.isEmpty })
                        })
                     {
                         DashboardRateLimitsCard(data: rateLimits)
                     }
                 }
+            } else if pm.isRunning {
+                Spacer()
+                HStack { Spacer(); ProgressView().controlSize(.large); Spacer() }
+                Text("Waiting for server…").foregroundStyle(.secondary)
+                Spacer()
+            } else {
+                Spacer()
+                ContentUnavailableView(
+                    "Server Not Running",
+                    systemImage: "waveform.path.ecg",
+                    description: Text("Enable the proxy server to view activity.")
+                )
+                Spacer()
             }
 
             if let error = pm.errorMessage {
@@ -37,12 +48,7 @@ struct GeneralView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .navigationTitle("Dashboard")
     }
-
-    // MARK: - Empty / Loading States
 
     private var loadingState: some View {
         Card("") {
@@ -77,5 +83,5 @@ struct GeneralView: View {
         .environment(AppEnvironment.shared)
         .environment(ProcessManager())
         .environment(DataService())
-        .frame(width: 640, height: 600)
+        .frame(width: 700, height: 600)
 }

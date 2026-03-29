@@ -1,4 +1,5 @@
 import Charts
+import OpenAPIURLSession
 import SwiftUI
 
 struct UsageView: View {
@@ -11,7 +12,7 @@ struct UsageView: View {
     private var snapshot: UsageSnapshot? { dataService.usage }
 
     var body: some View {
-        Group {
+        DetailPage("Usage") {
             if pm.isReachable {
                 Form {
                     if let snapshot {
@@ -23,21 +24,22 @@ struct UsageView: View {
                     chartSection
                 }
                 .formStyle(.grouped)
+                .scrollContentBackground(.hidden)
             } else if pm.isRunning {
-                ContentUnavailableView {
-                    ProgressView().controlSize(.large)
-                } description: {
-                    Text("Waiting for server…")
-                }
+                Spacer()
+                HStack { Spacer(); ProgressView().controlSize(.large); Spacer() }
+                Text("Waiting for server…").foregroundStyle(.secondary)
+                Spacer()
             } else {
+                Spacer()
                 ContentUnavailableView(
                     "Server Not Running",
                     systemImage: "chart.bar",
                     description: Text("Enable the proxy server to view usage.")
                 )
+                Spacer()
             }
         }
-        .navigationTitle("Usage")
         .task { await loadHistory() }
         .onChange(of: selectedRange) {
             Task { await loadHistory() }
@@ -58,15 +60,15 @@ struct UsageView: View {
                     .foregroundStyle(s.failure_requests == 0 ? .green : .orange)
             }
             LabeledContent("Input Tokens") {
-                Text(formatTokens(s.input_tokens))
+                Text(formatTokens(UInt64(s.input_tokens)))
                     .monospacedDigit()
             }
             LabeledContent("Output Tokens") {
-                Text(formatTokens(s.output_tokens))
+                Text(formatTokens(UInt64(s.output_tokens)))
                     .monospacedDigit()
             }
             LabeledContent("Total Tokens") {
-                Text(formatTokens(s.input_tokens + s.output_tokens))
+                Text(formatTokens(UInt64(s.input_tokens + s.output_tokens)))
                     .monospacedDigit()
                     .fontWeight(.semibold)
             }
@@ -77,12 +79,12 @@ struct UsageView: View {
 
     private func tokenBreakdownChart(_ s: UsageSnapshot) -> some View {
         Section("Token Distribution by Model") {
-            if s.models.isEmpty {
+            if s.models.additionalProperties.isEmpty {
                 Text("No data")
                     .foregroundStyle(.secondary)
             } else {
-                let sorted = s.models
-                    .map { TokenSlice(model: $0.key, input: $0.value.input_tokens, output: $0.value.output_tokens) }
+                let sorted = s.models.additionalProperties
+                    .map { TokenSlice(model: $0.key, input: UInt64($0.value.input_tokens), output: UInt64($0.value.output_tokens)) }
                     .sorted { ($0.input + $0.output) > ($1.input + $1.output) }
 
                 let top = Array(sorted.prefix(6))
@@ -114,12 +116,12 @@ struct UsageView: View {
 
     private func modelsSection(_ s: UsageSnapshot) -> some View {
         Section("By Model") {
-            if s.models.isEmpty {
+            if s.models.additionalProperties.isEmpty {
                 Text("No model usage recorded")
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(
-                    s.models.sorted(by: { $0.value.requests > $1.value.requests }),
+                    s.models.additionalProperties.sorted(by: { $0.value.requests > $1.value.requests }),
                     id: \.key
                 ) { model, stats in
                     VStack(alignment: .leading, spacing: 4) {
@@ -134,8 +136,8 @@ struct UsageView: View {
                                 .monospacedDigit()
                         }
                         HStack(spacing: 12) {
-                            Label(formatTokens(stats.input_tokens), systemImage: "arrow.up")
-                            Label(formatTokens(stats.output_tokens), systemImage: "arrow.down")
+                            Label(formatTokens(UInt64(stats.input_tokens)), systemImage: "arrow.up")
+                            Label(formatTokens(UInt64(stats.output_tokens)), systemImage: "arrow.down")
                             if stats.failure > 0 {
                                 Label("\(stats.failure) failed", systemImage: "exclamationmark.triangle")
                                     .foregroundStyle(.red)
@@ -224,7 +226,13 @@ struct UsageView: View {
         defer { isLoading = false }
         let now = Int64(Date().timeIntervalSince1970)
         let from = now - selectedRange.seconds
-        history = try? await APIClient.usageHistory(from: from, to: now)
+        let client = Client(
+            serverURL: AppEnvironment.shared.baseURL,
+            transport: URLSessionTransport()
+        )
+        history = try? await client.usage_history_handler(
+            .init(path: .init(from: from, to: now, model: ""))
+        ).ok.body.json
     }
 
     // MARK: - Helpers
@@ -236,16 +244,19 @@ struct UsageView: View {
     }
 
     private func aggregatedBuckets(_ h: UsageHistoryResponse) -> [AggregateBucket] {
-        Dictionary(grouping: h.buckets, by: \.period_start)
-            .map { key, buckets in
-                AggregateBucket(
-                    period_start: key,
-                    request_count: buckets.reduce(0) { $0 + $1.request_count },
-                    input_tokens: buckets.reduce(0) { $0 + $1.input_tokens },
-                    output_tokens: buckets.reduce(0) { $0 + $1.output_tokens }
-                )
-            }
-            .sorted(by: { $0.period_start < $1.period_start })
+        let grouped: [Int64: [Components.Schemas.UsageBucket]] = Dictionary(grouping: h.buckets, by: \.period_start)
+        let mapped: [AggregateBucket] = grouped.map { key, buckets in
+            let reqs = buckets.reduce(Int64(0)) { $0 + $1.request_count }
+            let inp = buckets.reduce(Int64(0)) { $0 + $1.input_tokens }
+            let out = buckets.reduce(Int64(0)) { $0 + $1.output_tokens }
+            return AggregateBucket(
+                period_start: key,
+                request_count: UInt64(reqs),
+                input_tokens: UInt64(inp),
+                output_tokens: UInt64(out)
+            )
+        }
+        return mapped.sorted(by: { $0.period_start < $1.period_start })
     }
 
     private func bucketDate(_ ts: Int64) -> Date {

@@ -53,7 +53,7 @@ struct DashboardActivityCard: View {
 
     private var topModelsList: some View {
         Group {
-            let sorted = (dataService.usage?.models ?? [:])
+            let sorted = (dataService.usage?.models.additionalProperties ?? [:])
                 .sorted { $0.value.requests > $1.value.requests }
                 .prefix(8)
 

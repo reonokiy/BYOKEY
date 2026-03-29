@@ -9,7 +9,7 @@ struct DashboardHistoryChart: View {
         return Dictionary(grouping: history.buckets, by: \.period_start)
             .map { ts, buckets in
                 (date: Date(timeIntervalSince1970: TimeInterval(ts)),
-                 requests: buckets.reduce(0) { $0 + $1.request_count })
+                 requests: UInt64(buckets.reduce(0) { $0 + $1.request_count }))
             }
             .sorted { $0.date < $1.date }
     }

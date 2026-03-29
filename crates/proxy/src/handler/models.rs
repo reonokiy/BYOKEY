@@ -2,18 +2,41 @@
 
 use axum::{Json, extract::State};
 use byokey_provider::all_models;
-use serde_json::{Value, json};
+use serde::Serialize;
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 use crate::AppState;
+
+/// OpenAI-compatible model list response.
+#[derive(Serialize, ToSchema)]
+pub struct ModelsResponse {
+    pub object: String,
+    pub data: Vec<ModelEntry>,
+}
+
+/// A single model entry.
+#[derive(Serialize, ToSchema)]
+pub struct ModelEntry {
+    pub id: String,
+    pub object: String,
+    pub created: i64,
+    pub owned_by: String,
+}
 
 /// Handles `GET /v1/models` requests.
 ///
 /// Returns an OpenAI-compatible model list from the unified registry.
 /// For models available on multiple providers, both unqualified (primary)
 /// and qualified (`provider/model`) forms are listed.
-pub async fn list_models(State(state): State<Arc<AppState>>) -> Json<Value> {
-    let mut data = Vec::new();
+#[utoipa::path(
+    get,
+    path = "/v1/models",
+    responses((status = 200, body = ModelsResponse)),
+    tag = "management"
+)]
+pub async fn list_models(State(state): State<Arc<AppState>>) -> Json<ModelsResponse> {
+    let mut data: Vec<ModelEntry> = Vec::new();
     let config = state.config.load();
 
     for entry in all_models() {
@@ -35,27 +58,27 @@ pub async fn list_models(State(state): State<Arc<AppState>>) -> Json<Value> {
             let alias_entry = aliases.and_then(|a| a.iter().find(|ae| ae.name == entry.id));
 
             if let Some(ae) = alias_entry {
-                data.push(json!({
-                    "id": ae.alias,
-                    "object": "model",
-                    "created": 0,
-                    "owned_by": primary_provider.to_string(),
-                }));
+                data.push(ModelEntry {
+                    id: ae.alias.clone(),
+                    object: "model".into(),
+                    created: 0,
+                    owned_by: primary_provider.to_string(),
+                });
                 if ae.fork {
-                    data.push(json!({
-                        "id": entry.id,
-                        "object": "model",
-                        "created": 0,
-                        "owned_by": primary_provider.to_string(),
-                    }));
+                    data.push(ModelEntry {
+                        id: entry.id.to_string(),
+                        object: "model".into(),
+                        created: 0,
+                        owned_by: primary_provider.to_string(),
+                    });
                 }
             } else {
-                data.push(json!({
-                    "id": entry.id,
-                    "object": "model",
-                    "created": 0,
-                    "owned_by": primary_provider.to_string(),
-                }));
+                data.push(ModelEntry {
+                    id: entry.id.to_string(),
+                    object: "model".into(),
+                    created: 0,
+                    owned_by: primary_provider.to_string(),
+                });
             }
         }
 
@@ -74,18 +97,18 @@ pub async fn list_models(State(state): State<Arc<AppState>>) -> Json<Value> {
                 if config.is_model_excluded(alt_provider, entry.id) {
                     continue;
                 }
-                data.push(json!({
-                    "id": format!("{}/{}", alt_provider, entry.id),
-                    "object": "model",
-                    "created": 0,
-                    "owned_by": alt_provider.to_string(),
-                }));
+                data.push(ModelEntry {
+                    id: format!("{}/{}", alt_provider, entry.id),
+                    object: "model".into(),
+                    created: 0,
+                    owned_by: alt_provider.to_string(),
+                });
             }
         }
     }
 
-    Json(json!({
-        "object": "list",
-        "data": data,
-    }))
+    Json(ModelsResponse {
+        object: "list".into(),
+        data,
+    })
 }

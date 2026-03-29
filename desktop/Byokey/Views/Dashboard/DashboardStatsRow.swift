@@ -12,14 +12,14 @@ struct DashboardStatsRow: View {
                 .frame(maxHeight: .infinity, alignment: .top)
             tokenCard(
                 title: "INPUT TOKENS",
-                value: usage?.input_tokens ?? 0,
+                value: UInt64(usage?.input_tokens ?? 0),
                 color: .indigo,
                 points: tokenTimeSeries(\.input_tokens)
             )
             .frame(maxHeight: .infinity, alignment: .top)
             tokenCard(
                 title: "OUTPUT TOKENS",
-                value: usage?.output_tokens ?? 0,
+                value: UInt64(usage?.output_tokens ?? 0),
                 color: .cyan,
                 points: tokenTimeSeries(\.output_tokens)
             )
@@ -30,7 +30,7 @@ struct DashboardStatsRow: View {
 
     private var requestsCard: some View {
         Card("REQUESTS") {
-            HeroNumber(value: usage?.total_requests ?? 0)
+            HeroNumber(value: UInt64(usage?.total_requests ?? 0))
 
             HStack(spacing: 16) {
                 HStack(spacing: 4) {
@@ -102,13 +102,13 @@ struct DashboardStatsRow: View {
     }
 
     private func tokenTimeSeries(
-        _ keyPath: KeyPath<UsageBucket, UInt64>
+        _ keyPath: KeyPath<UsageBucket, Int64>
     ) -> [(date: Date, value: UInt64)] {
         guard let history = dataService.history else { return [] }
         return Dictionary(grouping: history.buckets, by: \.period_start)
             .map { ts, buckets in
                 (date: Date(timeIntervalSince1970: TimeInterval(ts)),
-                 value: buckets.reduce(0) { $0 + $1[keyPath: keyPath] })
+                 value: UInt64(buckets.reduce(0) { $0 + $1[keyPath: keyPath] }))
             }
             .sorted { $0.date < $1.date }
     }

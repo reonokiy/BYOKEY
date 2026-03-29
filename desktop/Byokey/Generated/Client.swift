@@ -40,6 +40,10 @@ internal struct Client: APIProtocol {
     }
     /// Lists all accounts for every provider.
     ///
+    /// # Errors
+    ///
+    /// Returns `ApiError` if the underlying store query fails.
+    ///
     /// - Remark: HTTP `GET /v0/management/accounts`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/get(accounts_handler)`.
     internal func accounts_handler(_ input: Operations.accounts_handler.Input) async throws -> Operations.accounts_handler.Output {
@@ -100,6 +104,10 @@ internal struct Client: APIProtocol {
     }
     /// Removes a stored account (and its token) for a provider.
     ///
+    /// # Errors
+    ///
+    /// Returns 400 if the provider is unknown, or `ApiError` on store failure.
+    ///
     /// - Remark: HTTP `DELETE /v0/management/accounts/{provider}/{account_id}`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/{provider}/{account_id}/delete(remove_account_handler)`.
     internal func remove_account_handler(_ input: Operations.remove_account_handler.Input) async throws -> Operations.remove_account_handler.Output {
@@ -139,6 +147,10 @@ internal struct Client: APIProtocol {
     }
     /// Switches the active account for a provider.
     ///
+    /// # Errors
+    ///
+    /// Returns 400 if the provider is unknown, or `ApiError` on store failure.
+    ///
     /// - Remark: HTTP `POST /v0/management/accounts/{provider}/{account_id}/activate`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/{provider}/{account_id}/activate/post(activate_account_handler)`.
     internal func activate_account_handler(_ input: Operations.activate_account_handler.Input) async throws -> Operations.activate_account_handler.Output {
@@ -164,6 +176,66 @@ internal struct Client: APIProtocol {
                 switch response.status.code {
                 case 204:
                     return .noContent(.init())
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// Returns the latest captured rate limit headers for all providers.
+    ///
+    /// - Remark: HTTP `GET /v0/management/ratelimits`.
+    /// - Remark: Generated from `#/paths//v0/management/ratelimits/get(ratelimits_handler)`.
+    internal func ratelimits_handler(_ input: Operations.ratelimits_handler.Input) async throws -> Operations.ratelimits_handler.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.ratelimits_handler.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/v0/management/ratelimits",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.ratelimits_handler.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.RateLimitsResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
                 default:
                     return .undocumented(
                         statusCode: response.status.code,
@@ -215,6 +287,190 @@ internal struct Client: APIProtocol {
                     case "application/json":
                         body = try await converter.getResponseBodyAsJSON(
                             Components.Schemas.StatusResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// Returns current in-memory usage counters.
+    ///
+    /// - Remark: HTTP `GET /v0/management/usage`.
+    /// - Remark: Generated from `#/paths//v0/management/usage/get(usage_handler)`.
+    internal func usage_handler(_ input: Operations.usage_handler.Input) async throws -> Operations.usage_handler.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.usage_handler.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/v0/management/usage",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.usage_handler.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.UsageSnapshot.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// Returns bucketed usage history from the persistent store.
+    ///
+    /// - Remark: HTTP `GET /v0/management/usage/history`.
+    /// - Remark: Generated from `#/paths//v0/management/usage/history/get(usage_history_handler)`.
+    internal func usage_history_handler(_ input: Operations.usage_history_handler.Input) async throws -> Operations.usage_history_handler.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.usage_history_handler.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/v0/management/usage/history",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.usage_history_handler.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.UsageHistoryResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// Handles `GET /v1/models` requests.
+    ///
+    /// Returns an OpenAI-compatible model list from the unified registry.
+    /// For models available on multiple providers, both unqualified (primary)
+    /// and qualified (`provider/model`) forms are listed.
+    ///
+    /// - Remark: HTTP `GET /v1/models`.
+    /// - Remark: Generated from `#/paths//v1/models/get(list_models)`.
+    internal func list_models(_ input: Operations.list_models.Input) async throws -> Operations.list_models.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.list_models.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/v1/models",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.list_models.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ModelsResponse.self,
                             from: responseBody,
                             transforming: { value in
                                 .json(value)

@@ -13,29 +13,69 @@ import struct Foundation.Date
 internal protocol APIProtocol: Sendable {
     /// Lists all accounts for every provider.
     ///
+    /// # Errors
+    ///
+    /// Returns `ApiError` if the underlying store query fails.
+    ///
     /// - Remark: HTTP `GET /v0/management/accounts`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/get(accounts_handler)`.
     func accounts_handler(_ input: Operations.accounts_handler.Input) async throws -> Operations.accounts_handler.Output
     /// Removes a stored account (and its token) for a provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns 400 if the provider is unknown, or `ApiError` on store failure.
     ///
     /// - Remark: HTTP `DELETE /v0/management/accounts/{provider}/{account_id}`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/{provider}/{account_id}/delete(remove_account_handler)`.
     func remove_account_handler(_ input: Operations.remove_account_handler.Input) async throws -> Operations.remove_account_handler.Output
     /// Switches the active account for a provider.
     ///
+    /// # Errors
+    ///
+    /// Returns 400 if the provider is unknown, or `ApiError` on store failure.
+    ///
     /// - Remark: HTTP `POST /v0/management/accounts/{provider}/{account_id}/activate`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/{provider}/{account_id}/activate/post(activate_account_handler)`.
     func activate_account_handler(_ input: Operations.activate_account_handler.Input) async throws -> Operations.activate_account_handler.Output
+    /// Returns the latest captured rate limit headers for all providers.
+    ///
+    /// - Remark: HTTP `GET /v0/management/ratelimits`.
+    /// - Remark: Generated from `#/paths//v0/management/ratelimits/get(ratelimits_handler)`.
+    func ratelimits_handler(_ input: Operations.ratelimits_handler.Input) async throws -> Operations.ratelimits_handler.Output
     /// Returns the current server and provider status.
     ///
     /// - Remark: HTTP `GET /v0/management/status`.
     /// - Remark: Generated from `#/paths//v0/management/status/get(status_handler)`.
     func status_handler(_ input: Operations.status_handler.Input) async throws -> Operations.status_handler.Output
+    /// Returns current in-memory usage counters.
+    ///
+    /// - Remark: HTTP `GET /v0/management/usage`.
+    /// - Remark: Generated from `#/paths//v0/management/usage/get(usage_handler)`.
+    func usage_handler(_ input: Operations.usage_handler.Input) async throws -> Operations.usage_handler.Output
+    /// Returns bucketed usage history from the persistent store.
+    ///
+    /// - Remark: HTTP `GET /v0/management/usage/history`.
+    /// - Remark: Generated from `#/paths//v0/management/usage/history/get(usage_history_handler)`.
+    func usage_history_handler(_ input: Operations.usage_history_handler.Input) async throws -> Operations.usage_history_handler.Output
+    /// Handles `GET /v1/models` requests.
+    ///
+    /// Returns an OpenAI-compatible model list from the unified registry.
+    /// For models available on multiple providers, both unqualified (primary)
+    /// and qualified (`provider/model`) forms are listed.
+    ///
+    /// - Remark: HTTP `GET /v1/models`.
+    /// - Remark: Generated from `#/paths//v1/models/get(list_models)`.
+    func list_models(_ input: Operations.list_models.Input) async throws -> Operations.list_models.Output
 }
 
 /// Convenience overloads for operation inputs.
 extension APIProtocol {
     /// Lists all accounts for every provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ApiError` if the underlying store query fails.
     ///
     /// - Remark: HTTP `GET /v0/management/accounts`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/get(accounts_handler)`.
@@ -44,6 +84,10 @@ extension APIProtocol {
     }
     /// Removes a stored account (and its token) for a provider.
     ///
+    /// # Errors
+    ///
+    /// Returns 400 if the provider is unknown, or `ApiError` on store failure.
+    ///
     /// - Remark: HTTP `DELETE /v0/management/accounts/{provider}/{account_id}`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/{provider}/{account_id}/delete(remove_account_handler)`.
     internal func remove_account_handler(path: Operations.remove_account_handler.Input.Path) async throws -> Operations.remove_account_handler.Output {
@@ -51,10 +95,21 @@ extension APIProtocol {
     }
     /// Switches the active account for a provider.
     ///
+    /// # Errors
+    ///
+    /// Returns 400 if the provider is unknown, or `ApiError` on store failure.
+    ///
     /// - Remark: HTTP `POST /v0/management/accounts/{provider}/{account_id}/activate`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/{provider}/{account_id}/activate/post(activate_account_handler)`.
     internal func activate_account_handler(path: Operations.activate_account_handler.Input.Path) async throws -> Operations.activate_account_handler.Output {
         try await activate_account_handler(Operations.activate_account_handler.Input(path: path))
+    }
+    /// Returns the latest captured rate limit headers for all providers.
+    ///
+    /// - Remark: HTTP `GET /v0/management/ratelimits`.
+    /// - Remark: Generated from `#/paths//v0/management/ratelimits/get(ratelimits_handler)`.
+    internal func ratelimits_handler(headers: Operations.ratelimits_handler.Input.Headers = .init()) async throws -> Operations.ratelimits_handler.Output {
+        try await ratelimits_handler(Operations.ratelimits_handler.Input(headers: headers))
     }
     /// Returns the current server and provider status.
     ///
@@ -62,6 +117,37 @@ extension APIProtocol {
     /// - Remark: Generated from `#/paths//v0/management/status/get(status_handler)`.
     internal func status_handler(headers: Operations.status_handler.Input.Headers = .init()) async throws -> Operations.status_handler.Output {
         try await status_handler(Operations.status_handler.Input(headers: headers))
+    }
+    /// Returns current in-memory usage counters.
+    ///
+    /// - Remark: HTTP `GET /v0/management/usage`.
+    /// - Remark: Generated from `#/paths//v0/management/usage/get(usage_handler)`.
+    internal func usage_handler(headers: Operations.usage_handler.Input.Headers = .init()) async throws -> Operations.usage_handler.Output {
+        try await usage_handler(Operations.usage_handler.Input(headers: headers))
+    }
+    /// Returns bucketed usage history from the persistent store.
+    ///
+    /// - Remark: HTTP `GET /v0/management/usage/history`.
+    /// - Remark: Generated from `#/paths//v0/management/usage/history/get(usage_history_handler)`.
+    internal func usage_history_handler(
+        path: Operations.usage_history_handler.Input.Path,
+        headers: Operations.usage_history_handler.Input.Headers = .init()
+    ) async throws -> Operations.usage_history_handler.Output {
+        try await usage_history_handler(Operations.usage_history_handler.Input(
+            path: path,
+            headers: headers
+        ))
+    }
+    /// Handles `GET /v1/models` requests.
+    ///
+    /// Returns an OpenAI-compatible model list from the unified registry.
+    /// For models available on multiple providers, both unqualified (primary)
+    /// and qualified (`provider/model`) forms are listed.
+    ///
+    /// - Remark: HTTP `GET /v1/models`.
+    /// - Remark: Generated from `#/paths//v1/models/get(list_models)`.
+    internal func list_models(headers: Operations.list_models.Input.Headers = .init()) async throws -> Operations.list_models.Output {
+        try await list_models(Operations.list_models.Input(headers: headers))
     }
 }
 
@@ -115,6 +201,31 @@ internal enum Components {
                 case token_state
             }
         }
+        /// Rate limit snapshot for a single provider account.
+        ///
+        /// - Remark: Generated from `#/components/schemas/AccountRateLimit`.
+        internal struct AccountRateLimit: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/AccountRateLimit/account_id`.
+            internal var account_id: Swift.String
+            /// - Remark: Generated from `#/components/schemas/AccountRateLimit/snapshot`.
+            internal var snapshot: Components.Schemas.RateLimitSnapshot
+            /// Creates a new `AccountRateLimit`.
+            ///
+            /// - Parameters:
+            ///   - account_id:
+            ///   - snapshot:
+            internal init(
+                account_id: Swift.String,
+                snapshot: Components.Schemas.RateLimitSnapshot
+            ) {
+                self.account_id = account_id
+                self.snapshot = snapshot
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case account_id
+                case snapshot
+            }
+        }
         /// All accounts grouped by provider.
         ///
         /// - Remark: Generated from `#/components/schemas/AccountsResponse`.
@@ -140,6 +251,111 @@ internal enum Components {
             case expired = "expired"
             case not_configured = "not_configured"
         }
+        /// A single model entry.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ModelEntry`.
+        internal struct ModelEntry: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ModelEntry/created`.
+            internal var created: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/ModelEntry/id`.
+            internal var id: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ModelEntry/object`.
+            internal var object: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ModelEntry/owned_by`.
+            internal var owned_by: Swift.String
+            /// Creates a new `ModelEntry`.
+            ///
+            /// - Parameters:
+            ///   - created:
+            ///   - id:
+            ///   - object:
+            ///   - owned_by:
+            internal init(
+                created: Swift.Int64,
+                id: Swift.String,
+                object: Swift.String,
+                owned_by: Swift.String
+            ) {
+                self.created = created
+                self.id = id
+                self.object = object
+                self.owned_by = owned_by
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case created
+                case id
+                case object
+                case owned_by
+            }
+        }
+        /// Per-model usage counters.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ModelStats`.
+        internal struct ModelStats: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ModelStats/failure`.
+            internal var failure: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/ModelStats/input_tokens`.
+            internal var input_tokens: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/ModelStats/output_tokens`.
+            internal var output_tokens: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/ModelStats/requests`.
+            internal var requests: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/ModelStats/success`.
+            internal var success: Swift.Int64
+            /// Creates a new `ModelStats`.
+            ///
+            /// - Parameters:
+            ///   - failure:
+            ///   - input_tokens:
+            ///   - output_tokens:
+            ///   - requests:
+            ///   - success:
+            internal init(
+                failure: Swift.Int64,
+                input_tokens: Swift.Int64,
+                output_tokens: Swift.Int64,
+                requests: Swift.Int64,
+                success: Swift.Int64
+            ) {
+                self.failure = failure
+                self.input_tokens = input_tokens
+                self.output_tokens = output_tokens
+                self.requests = requests
+                self.success = success
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case failure
+                case input_tokens
+                case output_tokens
+                case requests
+                case success
+            }
+        }
+        /// OpenAI-compatible model list response.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ModelsResponse`.
+        internal struct ModelsResponse: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ModelsResponse/data`.
+            internal var data: [Components.Schemas.ModelEntry]
+            /// - Remark: Generated from `#/components/schemas/ModelsResponse/object`.
+            internal var object: Swift.String
+            /// Creates a new `ModelsResponse`.
+            ///
+            /// - Parameters:
+            ///   - data:
+            ///   - object:
+            internal init(
+                data: [Components.Schemas.ModelEntry],
+                object: Swift.String
+            ) {
+                self.data = data
+                self.object = object
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case data
+                case object
+            }
+        }
         /// Accounts for a single provider.
         ///
         /// - Remark: Generated from `#/components/schemas/ProviderAccounts`.
@@ -158,6 +374,37 @@ internal enum Components {
             ///   - id:
             internal init(
                 accounts: [Components.Schemas.AccountDetail],
+                display_name: Swift.String,
+                id: Swift.String
+            ) {
+                self.accounts = accounts
+                self.display_name = display_name
+                self.id = id
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case accounts
+                case display_name
+                case id
+            }
+        }
+        /// Rate limit data for a single provider.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ProviderRateLimits`.
+        internal struct ProviderRateLimits: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ProviderRateLimits/accounts`.
+            internal var accounts: [Components.Schemas.AccountRateLimit]
+            /// - Remark: Generated from `#/components/schemas/ProviderRateLimits/display_name`.
+            internal var display_name: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ProviderRateLimits/id`.
+            internal var id: Swift.String
+            /// Creates a new `ProviderRateLimits`.
+            ///
+            /// - Parameters:
+            ///   - accounts:
+            ///   - display_name:
+            ///   - id:
+            internal init(
+                accounts: [Components.Schemas.AccountRateLimit],
                 display_name: Swift.String,
                 id: Swift.String
             ) {
@@ -212,6 +459,72 @@ internal enum Components {
                 case enabled
                 case id
                 case models_count
+            }
+        }
+        /// A snapshot of rate limit headers captured from a single upstream response.
+        ///
+        /// - Remark: Generated from `#/components/schemas/RateLimitSnapshot`.
+        internal struct RateLimitSnapshot: Codable, Hashable, Sendable {
+            /// Unix timestamp (seconds) when this snapshot was captured.
+            ///
+            /// - Remark: Generated from `#/components/schemas/RateLimitSnapshot/captured_at`.
+            internal var captured_at: Swift.Int64
+            /// Raw rate-limit-related header key/value pairs.
+            ///
+            /// - Remark: Generated from `#/components/schemas/RateLimitSnapshot/headers`.
+            internal struct headersPayload: Codable, Hashable, Sendable {
+                /// A container of undocumented properties.
+                internal var additionalProperties: [String: Swift.String]
+                /// Creates a new `headersPayload`.
+                ///
+                /// - Parameters:
+                ///   - additionalProperties: A container of undocumented properties.
+                internal init(additionalProperties: [String: Swift.String] = .init()) {
+                    self.additionalProperties = additionalProperties
+                }
+                internal init(from decoder: any Decoder) throws {
+                    additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [])
+                }
+                internal func encode(to encoder: any Encoder) throws {
+                    try encoder.encodeAdditionalProperties(additionalProperties)
+                }
+            }
+            /// Raw rate-limit-related header key/value pairs.
+            ///
+            /// - Remark: Generated from `#/components/schemas/RateLimitSnapshot/headers`.
+            internal var headers: Components.Schemas.RateLimitSnapshot.headersPayload
+            /// Creates a new `RateLimitSnapshot`.
+            ///
+            /// - Parameters:
+            ///   - captured_at: Unix timestamp (seconds) when this snapshot was captured.
+            ///   - headers: Raw rate-limit-related header key/value pairs.
+            internal init(
+                captured_at: Swift.Int64,
+                headers: Components.Schemas.RateLimitSnapshot.headersPayload
+            ) {
+                self.captured_at = captured_at
+                self.headers = headers
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case captured_at
+                case headers
+            }
+        }
+        /// Top-level rate limits response.
+        ///
+        /// - Remark: Generated from `#/components/schemas/RateLimitsResponse`.
+        internal struct RateLimitsResponse: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/RateLimitsResponse/providers`.
+            internal var providers: [Components.Schemas.ProviderRateLimits]
+            /// Creates a new `RateLimitsResponse`.
+            ///
+            /// - Parameters:
+            ///   - providers:
+            internal init(providers: [Components.Schemas.ProviderRateLimits]) {
+                self.providers = providers
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case providers
             }
         }
         /// Server listen address.
@@ -272,6 +585,190 @@ internal enum Components {
             case expired = "expired"
             case invalid = "invalid"
         }
+        /// Time-bucketed usage aggregation result.
+        ///
+        /// - Remark: Generated from `#/components/schemas/UsageBucket`.
+        internal struct UsageBucket: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/UsageBucket/input_tokens`.
+            internal var input_tokens: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageBucket/model`.
+            internal var model: Swift.String
+            /// - Remark: Generated from `#/components/schemas/UsageBucket/output_tokens`.
+            internal var output_tokens: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageBucket/period_start`.
+            internal var period_start: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageBucket/request_count`.
+            internal var request_count: Swift.Int64
+            /// Creates a new `UsageBucket`.
+            ///
+            /// - Parameters:
+            ///   - input_tokens:
+            ///   - model:
+            ///   - output_tokens:
+            ///   - period_start:
+            ///   - request_count:
+            internal init(
+                input_tokens: Swift.Int64,
+                model: Swift.String,
+                output_tokens: Swift.Int64,
+                period_start: Swift.Int64,
+                request_count: Swift.Int64
+            ) {
+                self.input_tokens = input_tokens
+                self.model = model
+                self.output_tokens = output_tokens
+                self.period_start = period_start
+                self.request_count = request_count
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case input_tokens
+                case model
+                case output_tokens
+                case period_start
+                case request_count
+            }
+        }
+        /// Query parameters for the usage history endpoint.
+        ///
+        /// - Remark: Generated from `#/components/schemas/UsageHistoryQuery`.
+        internal struct UsageHistoryQuery: Codable, Hashable, Sendable {
+            /// Start of the time range (unix timestamp). Defaults to 24 hours ago.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UsageHistoryQuery/from`.
+            internal var from: Swift.Int64?
+            /// Optional model name filter.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UsageHistoryQuery/model`.
+            internal var model: Swift.String?
+            /// End of the time range (unix timestamp). Defaults to now.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UsageHistoryQuery/to`.
+            internal var to: Swift.Int64?
+            /// Creates a new `UsageHistoryQuery`.
+            ///
+            /// - Parameters:
+            ///   - from: Start of the time range (unix timestamp). Defaults to 24 hours ago.
+            ///   - model: Optional model name filter.
+            ///   - to: End of the time range (unix timestamp). Defaults to now.
+            internal init(
+                from: Swift.Int64? = nil,
+                model: Swift.String? = nil,
+                to: Swift.Int64? = nil
+            ) {
+                self.from = from
+                self.model = model
+                self.to = to
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case from
+                case model
+                case to
+            }
+        }
+        /// Response for the usage history endpoint.
+        ///
+        /// - Remark: Generated from `#/components/schemas/UsageHistoryResponse`.
+        internal struct UsageHistoryResponse: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/UsageHistoryResponse/bucket_seconds`.
+            internal var bucket_seconds: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageHistoryResponse/buckets`.
+            internal var buckets: [Components.Schemas.UsageBucket]
+            /// - Remark: Generated from `#/components/schemas/UsageHistoryResponse/from`.
+            internal var from: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageHistoryResponse/to`.
+            internal var to: Swift.Int64
+            /// Creates a new `UsageHistoryResponse`.
+            ///
+            /// - Parameters:
+            ///   - bucket_seconds:
+            ///   - buckets:
+            ///   - from:
+            ///   - to:
+            internal init(
+                bucket_seconds: Swift.Int64,
+                buckets: [Components.Schemas.UsageBucket],
+                from: Swift.Int64,
+                to: Swift.Int64
+            ) {
+                self.bucket_seconds = bucket_seconds
+                self.buckets = buckets
+                self.from = from
+                self.to = to
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case bucket_seconds
+                case buckets
+                case from
+                case to
+            }
+        }
+        /// JSON-serializable snapshot of current usage.
+        ///
+        /// - Remark: Generated from `#/components/schemas/UsageSnapshot`.
+        internal struct UsageSnapshot: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/UsageSnapshot/failure_requests`.
+            internal var failure_requests: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageSnapshot/input_tokens`.
+            internal var input_tokens: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageSnapshot/models`.
+            internal struct modelsPayload: Codable, Hashable, Sendable {
+                /// A container of undocumented properties.
+                internal var additionalProperties: [String: Components.Schemas.ModelStats]
+                /// Creates a new `modelsPayload`.
+                ///
+                /// - Parameters:
+                ///   - additionalProperties: A container of undocumented properties.
+                internal init(additionalProperties: [String: Components.Schemas.ModelStats] = .init()) {
+                    self.additionalProperties = additionalProperties
+                }
+                internal init(from decoder: any Decoder) throws {
+                    additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [])
+                }
+                internal func encode(to encoder: any Encoder) throws {
+                    try encoder.encodeAdditionalProperties(additionalProperties)
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/UsageSnapshot/models`.
+            internal var models: Components.Schemas.UsageSnapshot.modelsPayload
+            /// - Remark: Generated from `#/components/schemas/UsageSnapshot/output_tokens`.
+            internal var output_tokens: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageSnapshot/success_requests`.
+            internal var success_requests: Swift.Int64
+            /// - Remark: Generated from `#/components/schemas/UsageSnapshot/total_requests`.
+            internal var total_requests: Swift.Int64
+            /// Creates a new `UsageSnapshot`.
+            ///
+            /// - Parameters:
+            ///   - failure_requests:
+            ///   - input_tokens:
+            ///   - models:
+            ///   - output_tokens:
+            ///   - success_requests:
+            ///   - total_requests:
+            internal init(
+                failure_requests: Swift.Int64,
+                input_tokens: Swift.Int64,
+                models: Components.Schemas.UsageSnapshot.modelsPayload,
+                output_tokens: Swift.Int64,
+                success_requests: Swift.Int64,
+                total_requests: Swift.Int64
+            ) {
+                self.failure_requests = failure_requests
+                self.input_tokens = input_tokens
+                self.models = models
+                self.output_tokens = output_tokens
+                self.success_requests = success_requests
+                self.total_requests = total_requests
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case failure_requests
+                case input_tokens
+                case models
+                case output_tokens
+                case success_requests
+                case total_requests
+            }
+        }
     }
     /// Types generated from the `#/components/parameters` section of the OpenAPI document.
     internal enum Parameters {}
@@ -286,6 +783,10 @@ internal enum Components {
 /// API operations, with input and output types, generated from `#/paths` in the OpenAPI document.
 internal enum Operations {
     /// Lists all accounts for every provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ApiError` if the underlying store query fails.
     ///
     /// - Remark: HTTP `GET /v0/management/accounts`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/get(accounts_handler)`.
@@ -397,6 +898,10 @@ internal enum Operations {
     }
     /// Removes a stored account (and its token) for a provider.
     ///
+    /// # Errors
+    ///
+    /// Returns 400 if the provider is unknown, or `ApiError` on store failure.
+    ///
     /// - Remark: HTTP `DELETE /v0/management/accounts/{provider}/{account_id}`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/{provider}/{account_id}/delete(remove_account_handler)`.
     internal enum remove_account_handler {
@@ -478,6 +983,10 @@ internal enum Operations {
     }
     /// Switches the active account for a provider.
     ///
+    /// # Errors
+    ///
+    /// Returns 400 if the provider is unknown, or `ApiError` on store failure.
+    ///
     /// - Remark: HTTP `POST /v0/management/accounts/{provider}/{account_id}/activate`.
     /// - Remark: Generated from `#/paths//v0/management/accounts/{provider}/{account_id}/activate/post(activate_account_handler)`.
     internal enum activate_account_handler {
@@ -557,6 +1066,116 @@ internal enum Operations {
             case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
         }
     }
+    /// Returns the latest captured rate limit headers for all providers.
+    ///
+    /// - Remark: HTTP `GET /v0/management/ratelimits`.
+    /// - Remark: Generated from `#/paths//v0/management/ratelimits/get(ratelimits_handler)`.
+    internal enum ratelimits_handler {
+        internal static let id: Swift.String = "ratelimits_handler"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/v0/management/ratelimits/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ratelimits_handler.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ratelimits_handler.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.ratelimits_handler.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.ratelimits_handler.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/v0/management/ratelimits/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/v0/management/ratelimits/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.RateLimitsResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.RateLimitsResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ratelimits_handler.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ratelimits_handler.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            ///
+            ///
+            /// - Remark: Generated from `#/paths//v0/management/ratelimits/get(ratelimits_handler)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ratelimits_handler.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.ratelimits_handler.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
     /// Returns the current server and provider status.
     ///
     /// - Remark: HTTP `GET /v0/management/status`.
@@ -624,6 +1243,376 @@ internal enum Operations {
             /// - Throws: An error if `self` is not `.ok`.
             /// - SeeAlso: `.ok`.
             internal var ok: Operations.status_handler.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Returns current in-memory usage counters.
+    ///
+    /// - Remark: HTTP `GET /v0/management/usage`.
+    /// - Remark: Generated from `#/paths//v0/management/usage/get(usage_handler)`.
+    internal enum usage_handler {
+        internal static let id: Swift.String = "usage_handler"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/v0/management/usage/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.usage_handler.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.usage_handler.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.usage_handler.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.usage_handler.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/v0/management/usage/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/v0/management/usage/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.UsageSnapshot)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.UsageSnapshot {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.usage_handler.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.usage_handler.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            ///
+            ///
+            /// - Remark: Generated from `#/paths//v0/management/usage/get(usage_handler)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.usage_handler.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.usage_handler.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Returns bucketed usage history from the persistent store.
+    ///
+    /// - Remark: HTTP `GET /v0/management/usage/history`.
+    /// - Remark: Generated from `#/paths//v0/management/usage/history/get(usage_history_handler)`.
+    internal enum usage_history_handler {
+        internal static let id: Swift.String = "usage_history_handler"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/v0/management/usage/history/GET/path`.
+            internal struct Path: Sendable, Hashable {
+                /// Start of the time range (unix timestamp). Defaults to 24 hours ago.
+                ///
+                /// - Remark: Generated from `#/paths/v0/management/usage/history/GET/path/from`.
+                internal var from: Swift.Int64
+                /// End of the time range (unix timestamp). Defaults to now.
+                ///
+                /// - Remark: Generated from `#/paths/v0/management/usage/history/GET/path/to`.
+                internal var to: Swift.Int64
+                /// Optional model name filter.
+                ///
+                /// - Remark: Generated from `#/paths/v0/management/usage/history/GET/path/model`.
+                internal var model: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - from: Start of the time range (unix timestamp). Defaults to 24 hours ago.
+                ///   - to: End of the time range (unix timestamp). Defaults to now.
+                ///   - model: Optional model name filter.
+                internal init(
+                    from: Swift.Int64,
+                    to: Swift.Int64,
+                    model: Swift.String
+                ) {
+                    self.from = from
+                    self.to = to
+                    self.model = model
+                }
+            }
+            internal var path: Operations.usage_history_handler.Input.Path
+            /// - Remark: Generated from `#/paths/v0/management/usage/history/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.usage_history_handler.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.usage_history_handler.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.usage_history_handler.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            internal init(
+                path: Operations.usage_history_handler.Input.Path,
+                headers: Operations.usage_history_handler.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/v0/management/usage/history/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/v0/management/usage/history/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.UsageHistoryResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.UsageHistoryResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.usage_history_handler.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.usage_history_handler.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            ///
+            ///
+            /// - Remark: Generated from `#/paths//v0/management/usage/history/get(usage_history_handler)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.usage_history_handler.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.usage_history_handler.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Handles `GET /v1/models` requests.
+    ///
+    /// Returns an OpenAI-compatible model list from the unified registry.
+    /// For models available on multiple providers, both unqualified (primary)
+    /// and qualified (`provider/model`) forms are listed.
+    ///
+    /// - Remark: HTTP `GET /v1/models`.
+    /// - Remark: Generated from `#/paths//v1/models/get(list_models)`.
+    internal enum list_models {
+        internal static let id: Swift.String = "list_models"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/v1/models/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.list_models.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.list_models.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.list_models.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.list_models.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/v1/models/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/v1/models/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ModelsResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ModelsResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.list_models.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.list_models.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            ///
+            ///
+            /// - Remark: Generated from `#/paths//v1/models/get(list_models)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.list_models.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.list_models.Output.Ok {
                 get throws {
                     switch self {
                     case let .ok(response):

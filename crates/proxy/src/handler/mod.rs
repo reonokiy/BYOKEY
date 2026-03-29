@@ -12,6 +12,7 @@ pub(crate) mod messages;
 pub(crate) mod models;
 pub mod ratelimits;
 pub mod status;
+pub mod usage;
 
 // ── Shared header-filtering constants for proxy handlers ────────────
 
