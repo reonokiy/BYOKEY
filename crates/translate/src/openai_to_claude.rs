@@ -145,6 +145,7 @@ impl RequestTranslator for OpenAIToClaude {
             .iter()
             .filter(|m| m.get("role").and_then(Value::as_str) == Some("system"))
             .filter_map(|m| m.get("content").and_then(Value::as_str))
+            .filter(|s| !s.is_empty())
             .collect();
         let system = if system_parts.is_empty() {
             None

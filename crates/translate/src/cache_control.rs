@@ -40,6 +40,9 @@ fn inject_system_cache(req: &mut Value) {
     match req.get_mut("system") {
         Some(system) if system.is_string() => {
             let text = system.as_str().unwrap_or_default().to_owned();
+            if text.is_empty() {
+                return;
+            }
             *system = json!([{
                 "type": "text",
                 "text": text,

@@ -19,7 +19,7 @@ use axum::{
 use byokey_provider::CopilotExecutor;
 use byokey_provider::claude_headers::{ANTHROPIC_BETA, ANTHROPIC_VERSION};
 use byokey_provider::cloak::inject_billing_header;
-use byokey_types::{ByokError, ProviderId};
+use byokey_types::{ByokError, ProviderId, ThinkingCapability};
 use futures_util::{StreamExt as _, TryStreamExt as _, stream::try_unfold};
 use serde_json::Value;
 use std::sync::Arc;
@@ -41,34 +41,101 @@ const COPILOT_GITHUB_API_VERSION: &str = "2025-04-01";
 /// Authenticates with the Claude provider (API key or OAuth), then forwards
 /// the request body verbatim to the Anthropic API and streams the response
 /// back without translation.
-/// Strip thinking-related fields when they would cause an API error:
-/// 1. `tool_choice.type == "any"` or `"tool"` — API rejects thinking + forced `tool_choice`.
-/// 2. `thinking.type == "auto"` — not a valid Anthropic API value; API returns 400.
+/// Strip empty system content to prevent "text content blocks must be non-empty" API error.
 ///
-/// Also removes `output_config.effort` (adaptive thinking control) when thinking is
-/// stripped, and cleans up an empty `output_config` object afterward.
-/// Aligned with upstream `disableThinkingIfToolChoiceForced`.
-fn sanitize_thinking(body: &mut Value) {
-    let should_remove = {
-        let forced_tool = body
-            .get("tool_choice")
-            .and_then(|tc| tc.get("type"))
-            .and_then(Value::as_str)
-            .is_some_and(|t| t == "any" || t == "tool");
-
-        let auto_thinking = body
-            .get("thinking")
-            .and_then(|th| th.get("type"))
-            .and_then(Value::as_str)
-            .is_some_and(|t| t == "auto");
-
-        forced_tool || auto_thinking
+/// Handles both string (`"system": ""`) and array forms
+/// (`"system": [{"type": "text", "text": ""}]`).
+fn sanitize_system(body: &mut Value) {
+    let dominated_by_empty = match body.get("system") {
+        Some(Value::String(s)) => s.is_empty(),
+        Some(Value::Array(arr)) => arr.iter().all(|block| {
+            block
+                .get("text")
+                .and_then(Value::as_str)
+                .is_some_and(str::is_empty)
+        }),
+        _ => false,
     };
 
-    if should_remove && let Some(obj) = body.as_object_mut() {
+    if dominated_by_empty {
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("system");
+        }
+        return;
+    }
+
+    // Filter individual empty text blocks from an array that has some non-empty blocks.
+    if let Some(arr) = body.get_mut("system").and_then(Value::as_array_mut) {
+        arr.retain(|block| {
+            !block
+                .get("text")
+                .and_then(Value::as_str)
+                .is_some_and(str::is_empty)
+        });
+    }
+}
+
+/// Sanitize thinking configuration before sending to the Anthropic API.
+///
+/// Two cases require intervention:
+///
+/// 1. **`tool_choice` conflict** — the API rejects `thinking` when `tool_choice.type`
+///    is `"any"` or `"tool"`. Strip all thinking-related fields.
+///    Aligned with upstream `disableThinkingIfToolChoiceForced`.
+///
+/// 2. **`thinking.type: "auto"`** — not a valid Anthropic API value (returns 400).
+///    Instead of stripping (which silently disables thinking), translate based on
+///    model capability:
+///    - Hybrid (4.6): `"auto"` → `"adaptive"` — let Claude decide thinking depth.
+///    - `BudgetOnly` (legacy): `"auto"` → `"enabled"` + default budget.
+///    - No thinking support: strip entirely.
+fn sanitize_thinking(body: &mut Value) {
+    let forced_tool = body
+        .get("tool_choice")
+        .and_then(|tc| tc.get("type"))
+        .and_then(Value::as_str)
+        .is_some_and(|t| t == "any" || t == "tool");
+
+    if forced_tool {
+        strip_thinking_fields(body);
+        return;
+    }
+
+    let is_auto = body
+        .get("thinking")
+        .and_then(|th| th.get("type"))
+        .and_then(Value::as_str)
+        .is_some_and(|t| t == "auto");
+
+    if is_auto {
+        let model = body.get("model").and_then(Value::as_str).unwrap_or("");
+        match byokey_provider::thinking_capability(model) {
+            Some(ThinkingCapability::Hybrid) => {
+                // 4.6 models: "auto" semantically means "let the model decide".
+                body["thinking"] = serde_json::json!({"type": "adaptive"});
+                if let Some(obj) = body.as_object_mut() {
+                    obj.remove("output_config");
+                }
+            }
+            Some(_) => {
+                // Legacy models: "enabled" requires budget_tokens; use default.
+                body["thinking"] = serde_json::json!({
+                    "type": "enabled",
+                    "budget_tokens": byokey_translate::DEFAULT_AUTO_BUDGET
+                });
+            }
+            None => {
+                // Model has no thinking support — strip to avoid API error.
+                strip_thinking_fields(body);
+            }
+        }
+    }
+}
+
+/// Remove thinking-related fields and associated adaptive controls.
+fn strip_thinking_fields(body: &mut Value) {
+    if let Some(obj) = body.as_object_mut() {
         obj.remove("thinking");
-        // Adaptive thinking may also set output_config.effort; remove it to
-        // avoid leaking thinking controls when tool_choice forces tool use.
         if let Some(oc) = obj.get_mut("output_config").and_then(Value::as_object_mut) {
             oc.remove("effort");
             if oc.is_empty() {
@@ -120,6 +187,7 @@ pub async fn anthropic_messages(
     body: axum::extract::Json<Value>,
 ) -> Result<Response, ApiError> {
     let mut body = body.0;
+    sanitize_system(&mut body);
     sanitize_thinking(&mut body);
     let stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
     let beta = build_beta_header(&mut body);
@@ -219,6 +287,7 @@ pub async fn copilot_anthropic_messages(
     body: axum::extract::Json<Value>,
 ) -> Result<Response, ApiError> {
     let mut body = body.0;
+    sanitize_system(&mut body);
     sanitize_thinking(&mut body);
     let stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
     let beta = build_beta_header(&mut body);
@@ -525,5 +594,131 @@ async fn forward_response(
         let (input, output) = extract_anthropic_usage(&json);
         usage.record_success(model, provider, input, output);
         Ok((upstream_status, axum::Json(json)).into_response())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ── sanitize_thinking: tool_choice conflict ────────────────────────
+
+    #[test]
+    fn tool_choice_any_strips_thinking() {
+        let mut body = json!({
+            "model": "claude-opus-4-6",
+            "thinking": {"type": "enabled", "budget_tokens": 10000},
+            "tool_choice": {"type": "any"},
+            "output_config": {"effort": "high"}
+        });
+        sanitize_thinking(&mut body);
+        assert!(body.get("thinking").is_none());
+        assert!(body.get("output_config").is_none());
+    }
+
+    #[test]
+    fn tool_choice_tool_strips_thinking() {
+        let mut body = json!({
+            "model": "claude-opus-4-6",
+            "thinking": {"type": "adaptive"},
+            "tool_choice": {"type": "tool", "name": "get_weather"}
+        });
+        sanitize_thinking(&mut body);
+        assert!(body.get("thinking").is_none());
+    }
+
+    #[test]
+    fn tool_choice_auto_does_not_strip() {
+        let mut body = json!({
+            "model": "claude-opus-4-6",
+            "thinking": {"type": "adaptive"},
+            "tool_choice": {"type": "auto"}
+        });
+        sanitize_thinking(&mut body);
+        assert_eq!(body["thinking"]["type"], "adaptive");
+    }
+
+    // ── sanitize_thinking: "auto" translation ──────────────────────────
+
+    #[test]
+    fn auto_on_hybrid_model_becomes_adaptive() {
+        // claude-opus-4-6 is Hybrid → should translate to "adaptive".
+        let mut body = json!({
+            "model": "claude-opus-4-6",
+            "thinking": {"type": "auto"},
+            "output_config": {"effort": "high"}
+        });
+        sanitize_thinking(&mut body);
+        assert_eq!(body["thinking"]["type"], "adaptive");
+        // output_config should be removed — adaptive picks its own effort.
+        assert!(body.get("output_config").is_none());
+    }
+
+    #[test]
+    fn auto_on_unknown_model_strips_thinking() {
+        // Unknown model has no thinking support → strip entirely.
+        let mut body = json!({
+            "model": "gpt-4o",
+            "thinking": {"type": "auto"}
+        });
+        sanitize_thinking(&mut body);
+        assert!(body.get("thinking").is_none());
+    }
+
+    // ── sanitize_thinking: valid types pass through ────────────────────
+
+    #[test]
+    fn enabled_type_passes_through() {
+        let mut body = json!({
+            "model": "claude-opus-4-6",
+            "thinking": {"type": "enabled", "budget_tokens": 8000}
+        });
+        sanitize_thinking(&mut body);
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert_eq!(body["thinking"]["budget_tokens"], 8000);
+    }
+
+    #[test]
+    fn adaptive_type_passes_through() {
+        let mut body = json!({
+            "model": "claude-opus-4-6",
+            "thinking": {"type": "adaptive"}
+        });
+        sanitize_thinking(&mut body);
+        assert_eq!(body["thinking"]["type"], "adaptive");
+    }
+
+    #[test]
+    fn no_thinking_field_is_noop() {
+        let mut body = json!({"model": "claude-opus-4-6", "max_tokens": 1024});
+        let expected = body.clone();
+        sanitize_thinking(&mut body);
+        assert_eq!(body, expected);
+    }
+
+    // ── strip_thinking_fields ──────────────────────────────────────────
+
+    #[test]
+    fn strip_cleans_output_config_effort() {
+        let mut body = json!({
+            "thinking": {"type": "enabled"},
+            "output_config": {"effort": "high", "format": "json"}
+        });
+        strip_thinking_fields(&mut body);
+        assert!(body.get("thinking").is_none());
+        // "format" remains, only "effort" removed.
+        assert!(body["output_config"].get("effort").is_none());
+        assert_eq!(body["output_config"]["format"], "json");
+    }
+
+    #[test]
+    fn strip_removes_empty_output_config() {
+        let mut body = json!({
+            "thinking": {"type": "enabled"},
+            "output_config": {"effort": "high"}
+        });
+        strip_thinking_fields(&mut body);
+        assert!(body.get("output_config").is_none());
     }
 }

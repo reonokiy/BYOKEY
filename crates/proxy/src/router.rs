@@ -1,5 +1,6 @@
 //! Axum router construction and route registration.
 
+use axum::extract::DefaultBodyLimit;
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -86,6 +87,7 @@ pub fn make_router(state: Arc<AppState>) -> Router {
         )
         .route("/openapi.json", get(openapi::openapi_json))
         .with_state(state)
+        .layer(DefaultBodyLimit::max(200 * 1024 * 1024)) // 200 MB for image uploads
         .layer(TraceLayer::new_for_http())
 }
 

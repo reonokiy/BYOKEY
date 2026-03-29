@@ -79,6 +79,10 @@ pub struct ModelSuffix {
     pub thinking: Option<ThinkingConfig>,
 }
 
+/// Default thinking budget (tokens) for `Auto` mode on legacy Claude models
+/// that require an explicit `budget_tokens` value with `thinking.type: "enabled"`.
+pub const DEFAULT_AUTO_BUDGET: u32 = 10_000;
+
 /// Thinking configuration parsed from a model suffix.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ThinkingConfig {
@@ -201,12 +205,13 @@ pub fn apply_thinking(
 
         // ── Auto mode ───────────────────────────────────────────────────
         // Claude adaptive: thinking.type="adaptive" (let API pick effort).
-        // Claude legacy: thinking.type="enabled" without budget.
+        // Claude legacy: "enabled" + default budget (budget_tokens is required).
         (ProviderId::Claude, ThinkingConfig::Auto) => {
             if is_adaptive {
                 body["thinking"] = json!({"type": "adaptive"});
             } else {
-                body["thinking"] = json!({"type": "enabled"});
+                // Legacy: API requires budget_tokens for "enabled"; use default.
+                body = ThinkingExtractor::inject_thinking(body, DEFAULT_AUTO_BUDGET);
             }
             if let Some(obj) = body.as_object_mut() {
                 obj.remove("output_config");
@@ -626,12 +631,15 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_claude_auto() {
+    fn test_apply_claude_auto_legacy() {
+        // Legacy Claude (no Hybrid): Auto → "enabled" + DEFAULT_AUTO_BUDGET.
         let body = json!({"model": "claude-opus-4-5", "max_tokens": 8192});
         let out = apply_thinking(body, &ProviderId::Claude, &ThinkingConfig::Auto, None);
         assert_eq!(out["thinking"]["type"], "enabled");
-        // Auto mode: no budget_tokens specified
-        assert!(out["thinking"].get("budget_tokens").is_none());
+        assert_eq!(
+            out["thinking"]["budget_tokens"], DEFAULT_AUTO_BUDGET,
+            "legacy Auto must include budget_tokens (API requires it for 'enabled')"
+        );
     }
 
     #[test]
