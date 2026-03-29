@@ -634,7 +634,10 @@ pub async fn amp_management_proxy(
     }
 
     let config = state.config.load();
-    let strip_client_auth = config.amp.upstream_key.is_some();
+
+    // Resolve AMP auth: stored BYOKEY token > upstream_key > client passthrough.
+    let amp_token = state.auth.get_token(&ProviderId::Amp).await.ok();
+    let strip_client_auth = amp_token.is_some() || config.amp.upstream_key.is_some();
 
     let mut upstream_headers = rquest::header::HeaderMap::new();
     for (name, value) in &headers {
@@ -659,16 +662,11 @@ pub async fn amp_management_proxy(
         }
     }
 
-    if let Some(key) = &config.amp.upstream_key
-        && let (Ok(n_auth), Ok(v_auth), Ok(n_apikey), Ok(v_apikey)) = (
-            rquest::header::HeaderName::from_bytes(b"authorization"),
-            rquest::header::HeaderValue::from_str(&format!("Bearer {key}")),
-            rquest::header::HeaderName::from_bytes(b"x-api-key"),
-            rquest::header::HeaderValue::from_str(key.as_str()),
-        )
-    {
-        upstream_headers.insert(n_auth, v_auth);
-        upstream_headers.insert(n_apikey, v_apikey);
+    // Inject auth: stored token takes priority over upstream_key.
+    if let Some(token) = &amp_token {
+        inject_amp_auth(&mut upstream_headers, &token.access_token);
+    } else if let Some(key) = &config.amp.upstream_key {
+        inject_amp_auth(&mut upstream_headers, key);
     }
 
     let resp = match state
@@ -732,6 +730,19 @@ pub async fn amp_management_proxy(
     }
 
     (status, resp_headers, body_bytes).into_response()
+}
+
+/// Set `Authorization` and `X-Api-Key` headers on an outgoing request.
+fn inject_amp_auth(headers: &mut rquest::header::HeaderMap, token: &str) {
+    if let (Ok(n_auth), Ok(v_auth), Ok(n_apikey), Ok(v_apikey)) = (
+        rquest::header::HeaderName::from_bytes(b"authorization"),
+        rquest::header::HeaderValue::from_str(&format!("Bearer {token}")),
+        rquest::header::HeaderName::from_bytes(b"x-api-key"),
+        rquest::header::HeaderValue::from_str(token),
+    ) {
+        headers.insert(n_auth, v_auth);
+        headers.insert(n_apikey, v_apikey);
+    }
 }
 
 #[cfg(test)]

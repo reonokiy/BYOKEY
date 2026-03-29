@@ -16,6 +16,7 @@ pub enum ProviderId {
     Qwen,
     Kimi,
     IFlow,
+    Amp,
 }
 
 impl fmt::Display for ProviderId {
@@ -30,6 +31,7 @@ impl fmt::Display for ProviderId {
             Self::Qwen => write!(f, "qwen"),
             Self::Kimi => write!(f, "kimi"),
             Self::IFlow => write!(f, "iflow"),
+            Self::Amp => write!(f, "amp"),
         }
     }
 }
@@ -54,6 +56,7 @@ impl std::str::FromStr for ProviderId {
             "qwen" | "alibaba" => Ok(Self::Qwen),
             "kimi" | "moonshot" => Ok(Self::Kimi),
             "iflow" | "zai" | "glm" => Ok(Self::IFlow),
+            "amp" | "ampcode" => Ok(Self::Amp),
             other => Err(crate::ByokError::UnsupportedProvider(other.to_string())),
         }
     }
@@ -73,6 +76,7 @@ impl ProviderId {
             Self::Qwen => "Qwen (Alibaba)",
             Self::Kimi => "Kimi (Moonshot)",
             Self::IFlow => "iFlow (Z.ai)",
+            Self::Amp => "Amp (AmpCode)",
         }
     }
 
@@ -89,6 +93,7 @@ impl ProviderId {
             Self::Qwen,
             Self::Kimi,
             Self::IFlow,
+            Self::Amp,
         ]
     }
 }
@@ -120,6 +125,7 @@ mod tests {
         assert_eq!(ProviderId::Qwen.to_string(), "qwen");
         assert_eq!(ProviderId::Kimi.to_string(), "kimi");
         assert_eq!(ProviderId::IFlow.to_string(), "iflow");
+        assert_eq!(ProviderId::Amp.to_string(), "amp");
     }
 
     #[test]
@@ -139,6 +145,7 @@ mod tests {
         assert_eq!(ProviderId::from_str("qwen").unwrap(), ProviderId::Qwen);
         assert_eq!(ProviderId::from_str("kimi").unwrap(), ProviderId::Kimi);
         assert_eq!(ProviderId::from_str("iflow").unwrap(), ProviderId::IFlow);
+        assert_eq!(ProviderId::from_str("amp").unwrap(), ProviderId::Amp);
     }
 
     #[test]
@@ -154,6 +161,7 @@ mod tests {
         assert_eq!(ProviderId::from_str("moonshot").unwrap(), ProviderId::Kimi);
         assert_eq!(ProviderId::from_str("zai").unwrap(), ProviderId::IFlow);
         assert_eq!(ProviderId::from_str("glm").unwrap(), ProviderId::IFlow);
+        assert_eq!(ProviderId::from_str("ampcode").unwrap(), ProviderId::Amp);
     }
 
     #[test]
@@ -175,6 +183,7 @@ mod tests {
             ProviderId::Qwen,
             ProviderId::Kimi,
             ProviderId::IFlow,
+            ProviderId::Amp,
         ] {
             let json = serde_json::to_string(&p).unwrap();
             let back: ProviderId = serde_json::from_str(&json).unwrap();

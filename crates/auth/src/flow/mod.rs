@@ -10,7 +10,7 @@ pub mod device_code;
 use byokey_types::{ByokError, OAuthToken, ProviderId, Result};
 
 use crate::AuthManager;
-use crate::provider::{antigravity, claude, codex, copilot, gemini, iflow, kimi, qwen};
+use crate::provider::{amp, antigravity, claude, codex, copilot, gemini, iflow, kimi, qwen};
 
 /// Run the full interactive login flow for the given provider.
 ///
@@ -36,6 +36,7 @@ pub async fn login(provider: &ProviderId, auth: &AuthManager, account: Option<&s
         ProviderId::Copilot => device_code::run(&copilot::Copilot, auth, &http, account).await,
         ProviderId::Qwen => device_code::run(&qwen::Qwen::new(), auth, &http, account).await,
         ProviderId::Kimi => device_code::run(&kimi::Kimi, auth, &http, account).await,
+        ProviderId::Amp => auth_code::run(&amp::Amp, auth, &http, account).await,
         ProviderId::Kiro => Err(ByokError::Auth(
             "Kiro OAuth login not yet implemented".into(),
         )),

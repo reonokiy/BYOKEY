@@ -4,6 +4,7 @@
 //! provides URL building / parameter formatting functions for its provider.
 //! Token response parsing is handled by [`crate::token::parse_token_response`].
 
+pub mod amp;
 pub mod antigravity;
 pub mod claude;
 pub mod codex;

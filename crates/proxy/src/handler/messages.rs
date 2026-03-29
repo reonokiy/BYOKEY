@@ -13,7 +13,7 @@
 use axum::{
     body::Body,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use byokey_provider::CopilotExecutor;
@@ -145,10 +145,27 @@ fn strip_thinking_fields(body: &mut Value) {
     }
 }
 
-/// Merge betas from the request body's `betas` array into the base beta string,
-/// then strip the field so the upstream API doesn't reject it as unknown.
-fn build_beta_header(body: &mut Value) -> String {
+/// Merge betas from the request body's `betas` array and the client's
+/// `anthropic-beta` HTTP header into the base beta string, then strip the
+/// body field so the upstream API doesn't reject it as unknown.
+fn build_beta_header(body: &mut Value, client_headers: &HeaderMap) -> String {
     let mut betas = ANTHROPIC_BETA.to_string();
+
+    // Merge from client's `anthropic-beta` HTTP header (comma-separated).
+    if let Some(hv) = client_headers
+        .get("anthropic-beta")
+        .and_then(|v| v.to_str().ok())
+    {
+        for token in hv.split(',') {
+            let token = token.trim();
+            if !token.is_empty() && !betas.contains(token) {
+                betas.push(',');
+                betas.push_str(token);
+            }
+        }
+    }
+
+    // Merge from body's `betas` array (BYOKEY client-to-proxy convention).
     if let Some(arr) = body.get("betas").and_then(Value::as_array) {
         for b in arr {
             if let Some(s) = b.as_str()
@@ -184,13 +201,14 @@ fn detect_initiator(body: &Value) -> &'static str {
 
 pub async fn anthropic_messages(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     body: axum::extract::Json<Value>,
 ) -> Result<Response, ApiError> {
     let mut body = body.0;
     sanitize_system(&mut body);
     sanitize_thinking(&mut body);
     let stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
-    let beta = build_beta_header(&mut body);
+    let beta = build_beta_header(&mut body, &headers);
 
     // Global backend override: `claude.backend: copilot`.
     let config = state.config.load();
@@ -284,13 +302,14 @@ pub async fn anthropic_messages(
 /// Handles `POST /copilot/v1/messages` — always routes through Copilot.
 pub async fn copilot_anthropic_messages(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     body: axum::extract::Json<Value>,
 ) -> Result<Response, ApiError> {
     let mut body = body.0;
     sanitize_system(&mut body);
     sanitize_thinking(&mut body);
     let stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
-    let beta = build_beta_header(&mut body);
+    let beta = build_beta_header(&mut body, &headers);
     copilot_messages(&state, body, stream, &beta).await
 }
 

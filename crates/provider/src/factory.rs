@@ -93,6 +93,7 @@ pub fn make_executor_with_cache(
         ProviderId::Qwen => Some(Box::new(QwenExecutor::new(http, api_key, auth, ratelimit))),
         ProviderId::IFlow => Some(Box::new(IFlowExecutor::new(http, api_key, auth, ratelimit))),
         ProviderId::Kimi => Some(Box::new(KimiExecutor::new(http, api_key, auth, ratelimit))),
+        ProviderId::Amp => None, // Amp is not a model provider
     }
 }
 
