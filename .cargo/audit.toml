@@ -1,0 +1,4 @@
+[advisories]
+# rsa: Marvin Attack timing side-channel — no patch available.
+# Transitive dep via sqlx-mysql; not directly used for network-exposed RSA ops.
+ignore = ["RUSTSEC-2023-0071"]
