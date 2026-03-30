@@ -603,6 +603,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "http-body-util",
+ "notify",
  "rquest",
  "serde",
  "serde_json",

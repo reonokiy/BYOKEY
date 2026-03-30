@@ -120,7 +120,7 @@ mod tests {
         let config = Arc::new(arc_swap::ArcSwap::from_pointee(
             byokey_config::Config::default(),
         ));
-        AppState::new(config, auth, None)
+        AppState::with_thread_index(config, auth, None, Arc::new(crate::AmpThreadIndex::empty()))
     }
 
     async fn body_json(resp: axum::response::Response) -> Value {

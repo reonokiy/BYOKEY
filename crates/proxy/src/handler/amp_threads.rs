@@ -5,9 +5,10 @@
 //! - `GET /v0/management/amp/threads`      — paginated thread list (summaries)
 //! - `GET /v0/management/amp/threads/{id}` — full thread detail with messages
 
+use arc_swap::ArcSwap;
 use axum::{
     Json,
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -17,8 +18,11 @@ use std::{
     fs::{self, File},
     io::BufReader,
     path::PathBuf,
+    sync::Arc,
 };
 use utoipa::{IntoParams, ToSchema};
+
+use crate::AppState;
 
 // ── Threads directory resolution ─────────────────────────────────────
 
@@ -441,6 +445,139 @@ fn parse_detail(path: &std::path::Path) -> Result<AmpThreadDetail, String> {
     })
 }
 
+// ── In-memory thread index with file watching ───────────────────────
+
+/// Pre-sorted, in-memory index of all Amp thread summaries.
+///
+/// Built once at startup by scanning `~/.local/share/amp/threads/`, then
+/// kept up-to-date via `notify` file-system events.  The inner `ArcSwap`
+/// allows lock-free reads from HTTP handlers while the watcher task
+/// atomically swaps in a new snapshot on every change.
+pub struct AmpThreadIndex {
+    summaries: ArcSwap<Vec<AmpThreadSummary>>,
+}
+
+impl AmpThreadIndex {
+    /// Build the initial index by scanning the threads directory.
+    ///
+    /// This performs synchronous filesystem I/O and should be called from
+    /// within `spawn_blocking` or at startup before the server binds.
+    /// Build the initial index by scanning the threads directory.
+    ///
+    /// This performs synchronous filesystem I/O and should be called from
+    /// within `spawn_blocking` or at startup before the server binds.
+    #[must_use]
+    pub fn build() -> Self {
+        let summaries = scan_all_summaries();
+        Self {
+            summaries: ArcSwap::from_pointee(summaries),
+        }
+    }
+
+    /// Create an empty index (for tests or when the directory is absent).
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            summaries: ArcSwap::from_pointee(Vec::new()),
+        }
+    }
+
+    /// Return a snapshot of all cached summaries (sorted by `created` desc).
+    pub fn list(&self) -> arc_swap::Guard<Arc<Vec<AmpThreadSummary>>> {
+        self.summaries.load()
+    }
+
+    /// Start background file watching.
+    ///
+    /// Watches `~/.local/share/amp/threads/` for create / modify / remove
+    /// events and rebuilds the index on each change.  Events are debounced
+    /// (500 ms) so rapid writes from Amp don't cause redundant re-scans.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the OS file watcher cannot be created or the directory
+    /// cannot be registered for watching.
+    pub fn watch(self: &Arc<Self>) {
+        use notify::{RecursiveMode, Watcher as _};
+
+        let index = Arc::clone(self);
+        let dir = threads_dir();
+
+        tokio::task::spawn_blocking(move || {
+            if !dir.is_dir() {
+                tracing::debug!(path = %dir.display(), "amp threads dir not found, skipping watch");
+                return;
+            }
+
+            let (tx, rx) = std::sync::mpsc::channel();
+
+            let mut watcher =
+                notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+                    if let Ok(ev) = res {
+                        // Only react to JSON file changes.
+                        let dominated_by_json = ev.paths.iter().any(|p| {
+                            p.extension()
+                                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+                        });
+                        if dominated_by_json {
+                            let _ = tx.send(());
+                        }
+                    }
+                })
+                .expect("failed to create file watcher");
+
+            watcher
+                .watch(&dir, RecursiveMode::NonRecursive)
+                .expect("failed to watch amp threads directory");
+
+            tracing::info!(path = %dir.display(), "watching amp threads directory");
+
+            // Debounce: drain all pending signals, then rebuild once.
+            while rx.recv().is_ok() {
+                // Drain any events that arrived while we were scanning.
+                while rx.try_recv().is_ok() {}
+
+                // Small delay to let Amp finish writing.
+                std::thread::sleep(std::time::Duration::from_millis(500));
+
+                // Drain again after the delay.
+                while rx.try_recv().is_ok() {}
+
+                let new = scan_all_summaries();
+                tracing::debug!(count = new.len(), "amp thread index rebuilt");
+                index.summaries.store(Arc::new(new));
+            }
+        });
+    }
+}
+
+/// Scan the threads directory and return all parseable summaries, sorted
+/// by `created` descending (newest first).
+fn scan_all_summaries() -> Vec<AmpThreadSummary> {
+    let dir = threads_dir();
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+
+    let mut summaries: Vec<AmpThreadSummary> = entries
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.starts_with("T-")
+                || !std::path::Path::new(&name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
+            {
+                return None;
+            }
+            parse_summary(&entry.path())
+        })
+        .collect();
+
+    summaries.sort_unstable_by(|a, b| b.created.cmp(&a.created));
+    summaries
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────
 
 /// List Amp thread summaries.
@@ -451,59 +588,51 @@ fn parse_detail(path: &std::path::Path) -> Result<AmpThreadDetail, String> {
     responses((status = 200, body = AmpThreadListResponse)),
     tag = "management"
 )]
-pub async fn list_threads(Query(q): Query<AmpThreadListQuery>) -> Json<AmpThreadListResponse> {
-    let result = tokio::task::spawn_blocking(move || {
-        let dir = threads_dir();
-        let Ok(entries) = fs::read_dir(&dir) else {
-            return AmpThreadListResponse {
-                threads: Vec::new(),
-                total: 0,
-            };
-        };
+pub async fn list_threads(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<AmpThreadListQuery>,
+) -> Json<AmpThreadListResponse> {
+    let all = state.amp_threads.list();
 
-        let mut summaries: Vec<AmpThreadSummary> = entries
-            .filter_map(|entry| {
-                let entry = entry.ok()?;
-                let name = entry.file_name().to_string_lossy().to_string();
-                if !name.starts_with("T-")
-                    || !std::path::Path::new(&name)
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
-                {
-                    return None;
-                }
-                let summary = parse_summary(&entry.path())?;
+    // Apply has_messages filter.
+    let filtered: Vec<&AmpThreadSummary> = all
+        .iter()
+        .filter(|s| {
+            if let Some(want) = q.has_messages {
+                (s.message_count > 0) == want
+            } else {
+                true
+            }
+        })
+        .collect();
 
-                // Apply has_messages filter.
-                if let Some(want) = q.has_messages {
-                    let has = summary.message_count > 0;
-                    if has != want {
-                        return None;
-                    }
-                }
+    let total = filtered.len();
+    let limit = q.limit.min(200);
+    let offset = q.offset.min(total);
 
-                Some(summary)
-            })
-            .collect();
+    let threads: Vec<AmpThreadSummary> = filtered
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .map(clone_summary)
+        .collect();
 
-        // Sort by created descending (newest first).
-        summaries.sort_unstable_by(|a, b| b.created.cmp(&a.created));
+    Json(AmpThreadListResponse { threads, total })
+}
 
-        let total = summaries.len();
-        let limit = q.limit.min(200);
-        let offset = q.offset.min(total);
-        let threads: Vec<AmpThreadSummary> =
-            summaries.into_iter().skip(offset).take(limit).collect();
-
-        AmpThreadListResponse { threads, total }
-    })
-    .await
-    .unwrap_or_else(|_| AmpThreadListResponse {
-        threads: Vec::new(),
-        total: 0,
-    });
-
-    Json(result)
+/// Cheap clone of a summary (all small fields, no deep Value trees).
+fn clone_summary(s: &AmpThreadSummary) -> AmpThreadSummary {
+    AmpThreadSummary {
+        id: s.id.clone(),
+        created: s.created,
+        title: s.title.clone(),
+        message_count: s.message_count,
+        agent_mode: s.agent_mode.clone(),
+        last_model: s.last_model.clone(),
+        total_input_tokens: s.total_input_tokens,
+        total_output_tokens: s.total_output_tokens,
+        file_size_bytes: s.file_size_bytes,
+    }
 }
 
 /// Get full Amp thread detail by ID.
