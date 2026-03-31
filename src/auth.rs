@@ -1,5 +1,6 @@
 use anyhow::Result;
 use byokey_auth::AuthManager;
+use byokey_auth::flow::LoginOptions;
 use byokey_daemon::process::ServerStatus;
 use byokey_types::ProviderId;
 use std::{path::PathBuf, sync::Arc};
@@ -7,13 +8,18 @@ use std::{path::PathBuf, sync::Arc};
 pub async fn cmd_login(
     provider: ProviderId,
     account: Option<String>,
+    no_browser: bool,
     db: Option<PathBuf>,
 ) -> Result<()> {
     let auth = AuthManager::new(
         Arc::new(crate::open_store(db).await?),
         rquest::Client::new(),
     );
-    byokey_auth::flow::login(&provider, &auth, account.as_deref())
+    let opts = LoginOptions {
+        account: account.as_deref(),
+        no_browser,
+    };
+    byokey_auth::flow::login(&provider, &auth, &opts)
         .await
         .map_err(|e| anyhow::anyhow!("login failed: {e}"))?;
     Ok(())

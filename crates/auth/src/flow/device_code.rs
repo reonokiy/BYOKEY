@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use byokey_types::{ByokError, OAuthToken, ProviderId, Result};
 use std::time::Duration;
 
-use super::{open_browser, save_login_token};
+use super::{LoginOptions, open_browser, save_login_token};
 use crate::{AuthManager, credentials::OAuthCredentials, token, token::DeviceCodeResponse};
 
 /// Result of a single token poll attempt.
@@ -56,21 +56,21 @@ pub trait DeviceCodeFlow: Send + Sync {
 ///
 /// Returns an error on network failure, device code expiration, or token parse failure.
 #[allow(clippy::cast_precision_loss)]
-pub async fn run<P: DeviceCodeFlow>(
+pub async fn run<P: DeviceCodeFlow + ?Sized>(
     provider: &P,
     auth: &AuthManager,
     http: &rquest::Client,
-    account: Option<&str>,
+    opts: &LoginOptions<'_>,
 ) -> Result<()> {
     let creds = crate::credentials::fetch(provider.provider_name(), http).await?;
     let dc = provider.request_device_code(http, &creds).await?;
 
-    tracing::info!(
-        uri = %dc.verification_uri,
-        code = %dc.user_code,
-        "visit URL and enter verification code"
-    );
-    open_browser(&dc.verification_uri);
+    println!("\nVisit this URL and enter the code to log in:\n");
+    println!("  URL:  {}", dc.verification_uri);
+    println!("  Code: {}\n", dc.user_code);
+    if !opts.no_browser {
+        open_browser(&dc.verification_uri, opts);
+    }
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs(dc.expires_in);
     let mut interval = dc.interval as f64;
@@ -84,7 +84,7 @@ pub async fn run<P: DeviceCodeFlow>(
 
         match provider.poll_token(http, &creds, &dc.device_code).await? {
             PollResult::Success(tok) => {
-                save_login_token(auth, &provider.provider_id(), tok, account).await?;
+                save_login_token(auth, &provider.provider_id(), tok, opts.account).await?;
                 tracing::info!(provider = %provider.provider_id(), "login successful");
                 return Ok(());
             }

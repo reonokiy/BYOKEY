@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use byokey_types::{ByokError, OAuthToken, ProviderId, Result};
 use serde_json::Value;
 
-use super::{open_browser, save_login_token};
+use super::{LoginOptions, open_browser, save_login_token};
 use crate::{AuthManager, callback, credentials::OAuthCredentials, pkce, token};
 
 /// Provider-specific behavior for the Authorization Code + PKCE OAuth flow.
@@ -57,11 +57,11 @@ pub trait AuthCodeFlow: Send + Sync {
 ///
 /// Returns an error on network failure, state mismatch, missing callback parameters,
 /// token parse failure, or if the underlying store fails to save.
-pub async fn run<P: AuthCodeFlow>(
+pub async fn run<P: AuthCodeFlow + ?Sized>(
     provider: &P,
     auth: &AuthManager,
     http: &rquest::Client,
-    account: Option<&str>,
+    opts: &LoginOptions<'_>,
 ) -> Result<()> {
     let creds = crate::credentials::fetch(provider.provider_name(), http).await?;
 
@@ -74,7 +74,7 @@ pub async fn run<P: AuthCodeFlow>(
     let auth_url = provider.build_auth_url(&creds.client_id, &challenge, &state);
 
     let listener = callback::bind_callback(provider.callback_port()).await?;
-    open_browser(&auth_url);
+    open_browser(&auth_url, opts);
     let params = callback::accept_callback(listener).await?;
 
     verify_state(&params, &state)?;
@@ -85,7 +85,7 @@ pub async fn run<P: AuthCodeFlow>(
         .await?;
     let tok = provider.post_process(tok, http).await?;
 
-    save_login_token(auth, &provider.provider_id(), tok, account).await?;
+    save_login_token(auth, &provider.provider_id(), tok, opts.account).await?;
     tracing::info!(provider = %provider.provider_id(), "login successful");
     Ok(())
 }

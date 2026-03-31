@@ -90,6 +90,10 @@ enum Commands {
         /// Account identifier (e.g. `work`, `personal`). Defaults to `default`.
         #[arg(long, value_name = "NAME")]
         account: Option<String>,
+        /// Don't open a browser automatically; print the URL instead.
+        /// For providers that support device-code flow, this will use that flow.
+        #[arg(long)]
+        no_browser: bool,
         #[command(flatten)]
         store: StoreArgs,
     },
@@ -205,8 +209,9 @@ async fn main() -> Result<()> {
         Commands::Login {
             provider,
             account,
+            no_browser,
             store,
-        } => auth::cmd_login(provider, account, store.db).await,
+        } => auth::cmd_login(provider, account, no_browser, store.db).await,
         Commands::Logout {
             provider,
             account,
